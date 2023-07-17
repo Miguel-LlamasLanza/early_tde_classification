@@ -36,13 +36,22 @@ def get_data_from_FINK(save = True):
 # 	df = df.rename(columns = {'i:jd': 'jd', 'i:fid': 'fid', 'i:magpsf': 'magpsf',
 # 						   'i:sigmapsf': 'sigmapsf','i:candid': 'candid',
 # 						   'i:objectId': 'objectId'})
-	df.columns = df.columns.str.strip('i:')  # strip suffix at the right end only.
+	df.columns = df.columns.str.strip('i:')  # strip prefix
 
 	df.to_csv('ZTF_TDE_Data/from_Fink.csv', index = None)
 	return df
 
+def merge_features_tdes_SN(csv_tdes, csv_other, out_csv):
 
-# get_data_from_FINK()
+	feat_tdes = pd.read_csv(csv_tdes)
+	feat_other = pd.read_csv(csv_other)
+
+	merged_df = pd.concat([feat_tdes, feat_other])
+
+	merged_df.to_csv(out_csv, index = False)
+
+
+get_data_from_FINK()
 
 df = pd.read_csv('ZTF_TDE_Data/from_Fink.csv')
 #df = spark.read.csv('ZTF_TDE_Data/from_Fink.csv', header = True)
@@ -58,17 +67,16 @@ prefix = 'c'
 # Append temp columns with historical + current measurements
 for colname in what_to_concat:
  	df = concat_col(df, colname, prefix=prefix)
-"""#
+"""
 
-
-
-# TODO: Crop the light-curve before fitting
 
 
 
 converted_df = sn_tools.convert_full_dataset(df, obj_id_header='objectId')
 
 
+# Crop the light-curve before fitting
+# TODO: Trim based on histogram (get e.g. 90 pr cent)
 df_list = []
 for indx in range(np.unique(converted_df['id'].values).shape[0]):
 
@@ -77,14 +85,14 @@ for indx in range(np.unique(converted_df['id'].values).shape[0]):
 
 	for filt in ['g', 'r']:
 		object_df = converted_df[obj_flag][converted_df['FLT'] == filt].copy()
-		if len(object_df) > 2:
+		if len(object_df) > 3:
 			tmax = object_df['MJD'][object_df['FLUXCAL'].idxmax()]
-
 			object_df = object_df[object_df.MJD <= tmax]
-
 			df_list.append(object_df)
 
+
 converted_df_early = pd.concat(df_list)
+converted_df_early.to_csv('input_for_feature_extractor.csv', index = False)
 
 feature_matrix = sn_tools.featurize_full_dataset(converted_df_early, screen = True)
 
@@ -92,7 +100,8 @@ feature_matrix = sn_tools.featurize_full_dataset(converted_df_early, screen = Tr
 feature_matrix.to_csv('Features_check/features_tdes.csv', index = None)
 
 
-
+merge_features_tdes_SN('Features_check/features_tdes.csv', 'Features_check/features.csv',
+					   'Features_check/merged_features.csv')
 
 
 

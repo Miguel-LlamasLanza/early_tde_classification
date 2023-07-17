@@ -39,6 +39,7 @@ def mag2fluxcal_snana(magpsf: float, sigmapsf: float):
 
 	return fluxcal, fluxcal_err
 
+
 def convert_full_dataset(pdf: pd.DataFrame, obj_id_header='candid'):
 	"""Convert an entire data set from mag to fluxcal.
 
@@ -168,32 +169,39 @@ def featurize_full_dataset(lc: pd.DataFrame, screen=False):
 			c = {}
 			snratio = {}
 			mse = {}
+			chisq = {}
 			nrise = {}
 
 			# Get from output
 			[a['g'], b['g'], c['g'], snratio['g'], mse['g'], nrise['g'],
-			a['r'], b['r'], c['r'], snratio['r'], mse['r'], nrise['r']] = features
+			a['r'], b['r'], c['r'], snratio['r'], mse['r'], nrise['r'],
+												chisq['g'], chisq['r']] = features
 
 			plt.figure()
 			plt.title(name)
-			for filt in ['g', 'r']:
+			plt.xlabel('Time (days)')
+			plt.ylabel('Fluxcal')
+			for filt, color in zip(['g', 'r'], ['#15284F', '#F5622E']):
 
 				# mask_filt = mask[filt]
-				masked_lc = lc[obj_flag][lc['FLT']==filt].copy()
+				masked_lc = lc[obj_flag][lc['FLT']==filt]
 
 				if len(masked_lc)!=0:
 
-					t0 = masked_lc['MJD'][masked_lc['FLUXCAL'].idxmin()]
+					# t0 = masked_lc['MJD'][masked_lc['FLUXCAL'].idxmin()]
+					t0 = min(masked_lc['MJD'])
 					tmax = masked_lc['MJD'][masked_lc['FLUXCAL'].idxmax()]
 
 					# t0 = time[flux.argmax()] - time[0]
 
-					x = np.linspace(-60, 60, num = 200)
+					x = np.linspace(t0 - tmax - 20, tmax - t0 + 30, num = 200)
 
 					sigmoid = fit_lc.sigmoid_profile(x, a[filt], b[filt], c[filt])
 
-					plt.plot(x, sigmoid)
-					plt.scatter(masked_lc['MJD'] - t0 , masked_lc['FLUXCAL'])
+					plt.plot(x, sigmoid, c = color)
+					plt.errorbar(masked_lc['MJD'] - t0 , masked_lc['FLUXCAL'], fmt = '.', elinewidth=0.5,
+								  yerr = masked_lc['FLUXCALERR'], label = filt, c = color)
+					plt.legend()
 
 
 		for j in range(len(features)):
@@ -201,6 +209,8 @@ def featurize_full_dataset(lc: pd.DataFrame, screen=False):
 
 		features_all.append(line)
 
+	columns.extend(['chisq_g', 'chisq_r'])
 	feature_matrix = pd.DataFrame(features_all, columns=columns)
 
 	return feature_matrix
+
