@@ -17,6 +17,7 @@ from pyspark.sql import functions as F
 spark = SparkSession.builder.appName("tde_classif").getOrCreate()
 """
 
+
 def get_data_from_FINK(save = True):
 
 	# Get object names
@@ -41,6 +42,7 @@ def get_data_from_FINK(save = True):
 	df.to_csv('ZTF_TDE_Data/from_Fink.csv', index = None)
 	return df
 
+
 def merge_features_tdes_SN(csv_tdes, csv_other, out_csv):
 
 	feat_tdes = pd.read_csv(csv_tdes)
@@ -54,7 +56,7 @@ def merge_features_tdes_SN(csv_tdes, csv_other, out_csv):
 get_data_from_FINK()
 
 df = pd.read_csv('ZTF_TDE_Data/from_Fink.csv')
-#df = spark.read.csv('ZTF_TDE_Data/from_Fink.csv', header = True)
+# df = spark.read.csv('ZTF_TDE_Data/from_Fink.csv', header = True)
 
 
 """
@@ -68,8 +70,6 @@ prefix = 'c'
 for colname in what_to_concat:
  	df = concat_col(df, colname, prefix=prefix)
 """
-
-
 
 
 converted_df = sn_tools.convert_full_dataset(df, obj_id_header='objectId')

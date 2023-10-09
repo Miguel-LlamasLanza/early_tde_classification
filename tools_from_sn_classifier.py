@@ -169,13 +169,13 @@ def featurize_full_dataset(lc: pd.DataFrame, screen=False):
 			c = {}
 			snratio = {}
 			mse = {}
-			chisq = {}
+# 			chisq = {}
 			nrise = {}
 
 			# Get from output
 			[a['g'], b['g'], c['g'], snratio['g'], mse['g'], nrise['g'],
-			a['r'], b['r'], c['r'], snratio['r'], mse['r'], nrise['r'],
-												chisq['g'], chisq['r']] = features
+			a['r'], b['r'], c['r'], snratio['r'], mse['r'], nrise['r']  # , chisq['g'], chisq['r']
+				] = features
 
 			plt.figure()
 			plt.title(name)
@@ -209,7 +209,7 @@ def featurize_full_dataset(lc: pd.DataFrame, screen=False):
 
 		features_all.append(line)
 
-	columns.extend(['chisq_g', 'chisq_r'])
+	# columns.extend(['chisq_g', 'chisq_r'])
 	feature_matrix = pd.DataFrame(features_all, columns=columns)
 
 	return feature_matrix
