@@ -22,6 +22,7 @@ from actsnfink.sigmoid import fit_sigmoid
 from actsnfink.sigmoid import delta_t
 from actsnfink.sigmoid import compute_mse
 from actsnfink.sigmoid import fsigmoid
+from scipy.stats import chisquare
 
 __all__ = ['filter_data', 'mask_negative_data', 'get_fake_df', 'get_fake_fit_parameters',
           'get_fake_results', 'get_ewma_derivative', 'get_sn_ratio', 'get_predicted_flux',
@@ -34,6 +35,27 @@ columns_to_keep_elastic = ['MJD', 'FLT', 'FLUXCAL', 'FLUXCALERR']
 
 fluxes = ['FLUXCAL', 'FLUXCALERR']
 RF_FEATURE_NAMES = 'a_g,b_g,c_g,snratio_g,mse_g,nrise_g,a_r,b_r,c_r,snratio_r,mse_r,nrise_r'.split(',')
+
+
+def compute_chi_square(f_obs: np.array, f_exp: np.array) -> float:
+
+    """ Compute chisquare
+
+    Parameters
+    ----------
+    f_obs: np.array
+        observed data points
+    f_exp: np.array
+        fitted (predicted) data points
+
+    Returns
+    -------
+    test_chi[0]: float
+        chi_square between fitted and observed
+    """
+
+    test_chi = chisquare(f_obs, f_exp,)
+    return test_chi[0]
 
 
 def filter_data(data, filt):
@@ -76,10 +98,10 @@ def mask_negative_data(data, low_bound):
        light curve with masked flux
 
         """
-    
+
     masked_data = deepcopy(data[data['FLUXCAL'].values > low_bound])
     masked_data.dropna(inplace=True)
-    
+
     return masked_data
 
 
@@ -325,8 +347,8 @@ def get_max_fluxcal(data, list_filters):
 
     return max_fluxcal
 
-def get_sigmoid_features_elasticc(data_all: pd.DataFrame, 
-                                  min_data_points=3, 
+def get_sigmoid_features_elasticc(data_all: pd.DataFrame,
+                                  min_data_points=3,
                                   list_filters=['g', 'r']):
     """Compute the features needed for the Random Forest classification based
     on the sigmoid model.
@@ -347,7 +369,7 @@ def get_sigmoid_features_elasticc(data_all: pd.DataFrame,
     -------
     out: list of floats
         List of features, ordered by filter bands:
-        [a['X'], b['X'], c['X'], snratio['X'], chisq['X'], nrise['X'] 
+        [a['X'], b['X'], c['X'], snratio['X'], chisq['X'], nrise['X']
         for X in list_filters]
     """
     # lower bound on flux
@@ -373,25 +395,25 @@ def get_sigmoid_features_elasticc(data_all: pd.DataFrame,
     for i in list_filters:
         # select filter
         data_tmp = filter_data(data_all, i)
-        
+
         max_fluxcal = max(data_tmp['FLUXCAL'])
         mjd = data_temp['MJD'].values
-        
+
         if(max_fluxcal > cutoff_max) and \
             max_fluxcal == data_temp['FLUXCAL'].values[np.argsort(mjd)[-1]]:
 
             # average over intraday data points
             data_tmp_avg = average_intraday_data(data_tmp)
-            
+
             # check data have minimum number of data points
             if len(data_mjd['FLUXCAL'].values) >= min_data_points:
-            
+
                 # compute the derivative
                 deriv_ewma = get_ewma_derivative(data_mjd['FLUXCAL'],
                                                  ewma_window)
                 # mask data with negative part
                 data_masked = data_mjd.mask(deriv_ewma < 0)
-                
+
                 # get longest raising sequence
                 rising_data = data_masked.dropna()
 
@@ -445,9 +467,9 @@ def get_sigmoid_features_elasticc(data_all: pd.DataFrame,
         result.append(nrise[f])
 
     return result
-                                            
-def get_sigmoid_features_elasticc_perfilter(data_all: pd.DataFrame, 
-                                  min_data_points=3, 
+
+def get_sigmoid_features_elasticc_perfilter(data_all: pd.DataFrame,
+                                  min_data_points=3,
                                   list_filters=['g', 'r']):
     """Compute the features needed for the Random Forest classification based
     on the sigmoid model.
@@ -468,7 +490,7 @@ def get_sigmoid_features_elasticc_perfilter(data_all: pd.DataFrame,
     -------
     out: list of floats
         List of features, ordered by filter bands:
-        [a['X'], b['X'], c['X'], snratio['X'], chisq['X'], nrise['X'] 
+        [a['X'], b['X'], c['X'], snratio['X'], chisq['X'], nrise['X']
         for X in list_filters]
     """
     # width of the ewma window
@@ -490,36 +512,36 @@ def get_sigmoid_features_elasticc_perfilter(data_all: pd.DataFrame,
 
     # get maximum flux
     max_fluxcal = get_max_fluxcal(data_all, list_filters)
-    
+
     if max_fluxcal > cutoff_max:
-    
+
         for i in list_filters:
-            
+
             # select filter
             data_tmp = filter_data(data_all, i)
-            
+
             # determine lower bound for fluxcal at 10% max fluxcal for this filter
             if data_tmp.shape[0] > 0:
                 flux_low_bound = -0.1 * max(data_tmp['FLUXCAL'].values)
-                
+
                 # remove values below lower bound
                 data_mjd = mask_negative_data(data_tmp, flux_low_bound)
 
                 # average over intraday data points
-                data_tmp_avg = average_intraday_data(data_mjd)  
+                data_tmp_avg = average_intraday_data(data_mjd)
 
                 # check if minimum number of points is respected
                 if data_tmp_avg.shape[0] >= min_data_points:
                     # compute the derivative
                     deriv_ewma = get_ewma_derivative(data_tmp_avg['FLUXCAL'],
                                                      ewma_window)
-            
+
                     # mask data with negative part
                     data_masked = data_tmp_avg.mask(deriv_ewma < 0)
-                
+
                     # get longest raising sequence
                     rising_data = data_masked.dropna()
-                    
+
                     # check data have minimum number of data points and if
                     # the alert is still rising
                     if rising_data.shape[0] >= min_rising_points and  \
@@ -546,7 +568,7 @@ def get_sigmoid_features_elasticc_perfilter(data_all: pd.DataFrame,
 
                         # compute mse
                         chisq[i] = compute_mse(rising_flux, pred_flux)
-  
+
                     else:
                         # if maximum is not last alert or not enough rising points
                         [a[i], b[i], c[i], snratio[i], chisq[i], nrise[i]] = \
@@ -559,7 +581,7 @@ def get_sigmoid_features_elasticc_perfilter(data_all: pd.DataFrame,
                 # if maximum or no points in filter
                 [a[i], b[i], c[i], snratio[i], chisq[i], nrise[i]] = \
                   get_fake_results(i)
-    else:  
+    else:
         for i in list_filters:
             # if max fluxcal lower than threshol
             [a[i], b[i], c[i], snratio[i], chisq[i], nrise[i]] = \
@@ -614,6 +636,7 @@ def get_sigmoid_features_dev(data_all: pd.DataFrame):
     c = {}
     snratio = {}
     mse = {}
+    chisq = {}
     nrise = {}
 
     for i in list_filters:
@@ -658,19 +681,29 @@ def get_sigmoid_features_dev(data_all: pd.DataFrame):
                 # compute mse
                 mse[i] = compute_mse(rising_flux/sum(rising_flux),
                                      pred_flux/sum(pred_flux))
+				# compute chisq
+                chisq[i] = compute_chi_square(rising_flux/sum(rising_flux),
+                                 pred_flux/sum(pred_flux))
 
             else:
                 # if rising flux has less than three
                 [a[i], b[i], c[i], snratio[i], mse[i], nrise[i]] = \
                     get_fake_results(i)
+                chisq[i] = 1e8
         else:
             # if data points not enough
             [a[i], b[i], c[i], snratio[i], mse[i], nrise[i]] = \
                 get_fake_results(i)
+            chisq[i] = 1e8
 
+    # return [
+    #     a['g'], b['g'], c['g'], snratio['g'], mse['g'], nrise['g'],
+    #     a['r'], b['r'], c['r'], snratio['r'], mse['r'], nrise['r']
+    # ]
     return [
         a['g'], b['g'], c['g'], snratio['g'], mse['g'], nrise['g'],
-        a['r'], b['r'], c['r'], snratio['r'], mse['r'], nrise['r']
+        a['r'], b['r'], c['r'], snratio['r'], mse['r'], nrise['r'],
+		chisq['g'], chisq['r']
     ]
 
 

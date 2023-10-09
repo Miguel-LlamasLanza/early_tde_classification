@@ -1,21 +1,11 @@
 import requests
 import numpy as np
-# import sys
-# sys.path.append('/home/lmiguel/gitlab_projects/tde_classification/spark/spark-3.1.3-bin-hadoop3.2/python')
+
 
 import pandas as pd
 from io import BytesIO
 import tools_from_sn_classifier as sn_tools
-from Data_other_studies.fink_sn_activelearning.actsnfink import classifier_sigmoid
-# from fink_utils.spark.utils import concat_col
-
-"""
-from pyspark.sql import SparkSession
-from pyspark.sql import functions as F
-
-# Spark intialization
-spark = SparkSession.builder.appName("tde_classif").getOrCreate()
-"""
+from fink_sn_AL_classifier.actsnfink import classifier_sigmoid
 
 
 def get_data_from_FINK(save = True):
@@ -53,23 +43,11 @@ def merge_features_tdes_SN(csv_tdes, csv_other, out_csv):
 	merged_df.to_csv(out_csv, index = False)
 
 
-get_data_from_FINK()
+
+
+# get_data_from_FINK()
 
 df = pd.read_csv('ZTF_TDE_Data/from_Fink.csv')
-# df = spark.read.csv('ZTF_TDE_Data/from_Fink.csv', header = True)
-
-
-"""
-what_to_concat = ['jd', 'fid', 'magpsf', 'sigmapsf']
-
-# Use for creating temp name
-prefix = 'c'
-# what_prefix = [prefix + i for i in what_to_concat]
-
-# Append temp columns with historical + current measurements
-for colname in what_to_concat:
- 	df = concat_col(df, colname, prefix=prefix)
-"""
 
 
 converted_df = sn_tools.convert_full_dataset(df, obj_id_header='objectId')

@@ -7,7 +7,8 @@ Created on Wed May 17 15:17:45 2023
 """
 import pandas as pd
 import numpy as np
-from Data_other_studies.fink_sn_activelearning.actsnfink import classifier_sigmoid
+from fink_sn_AL_classifier.actsnfink import classifier_sigmoid
+from fink_sn_AL_classifier.actsnfink.early_sn_classifier import mag2fluxcal_snana
 import fit_Lightcurve as fit_lc
 import matplotlib.pyplot as plt
 
@@ -16,28 +17,6 @@ import matplotlib.pyplot as plt
 
 
 
-def mag2fluxcal_snana(magpsf: float, sigmapsf: float):
-	""" Conversion from magnitude to Fluxcal from SNANA manual
-	Parameters
-	----------
-	magpsf: float
-		PSF-fit magnitude from ZTF.
-	sigmapsf: float
-		Error on PSF-fit magnitude from ZTF.
-
-	Returns
-	----------
-	fluxcal: float
-		Flux cal as used by SNANA
-	fluxcal_err: float
-		Absolute error on fluxcal (the derivative has a minus sign)
-	"""
-	if magpsf is None:
-		return None, None
-	fluxcal = 10 ** (-0.4 * magpsf) * 10 ** (11)
-	fluxcal_err = 9.21034 * 10 ** 10 * np.exp(-0.921034 * magpsf) * sigmapsf
-
-	return fluxcal, fluxcal_err
 
 
 def convert_full_dataset(pdf: pd.DataFrame, obj_id_header='candid'):
@@ -169,12 +148,12 @@ def featurize_full_dataset(lc: pd.DataFrame, screen=False):
 			c = {}
 			snratio = {}
 			mse = {}
-# 			chisq = {}
+			chisq = {}
 			nrise = {}
 
 			# Get from output
 			[a['g'], b['g'], c['g'], snratio['g'], mse['g'], nrise['g'],
-			a['r'], b['r'], c['r'], snratio['r'], mse['r'], nrise['r']  # , chisq['g'], chisq['r']
+			a['r'], b['r'], c['r'], snratio['r'], mse['r'], nrise['r'], chisq['g'], chisq['r']
 				] = features
 
 			plt.figure()
@@ -209,7 +188,7 @@ def featurize_full_dataset(lc: pd.DataFrame, screen=False):
 
 		features_all.append(line)
 
-	# columns.extend(['chisq_g', 'chisq_r'])
+	columns.extend(['chisq_g', 'chisq_r'])
 	feature_matrix = pd.DataFrame(features_all, columns=columns)
 
 	return feature_matrix
