@@ -3,6 +3,7 @@ import numpy as np
 import glob
 import pandas as pd
 from io import BytesIO
+import sys
 import tools_from_sn_classifier as sn_tools
 
 
@@ -29,6 +30,24 @@ def get_data_from_FINK(save = True):
 	if save:
 		df.to_csv('ZTF_TDE_Data/from_Fink.csv', index = None)
 	return df
+
+
+def load_forced_photometry_data(fink_df):
+
+
+	# Load forced-photometry data
+	forced_phot_data = glob.glob('ZTF_TDE_Data/forced_photometry/batchfp_*.txt')
+	list_of_dfs = []
+	for forced_phot_fname in forced_phot_data:
+		obj_id = find_objectId_for_forced_phot_data(forced_phot_fname, fink_df)
+		df_forced_phot = pd.read_csv(forced_phot_fname, comment = '#', sep = ' ')
+		df_forced_phot.columns = df_forced_phot.columns.str.strip(',')  # strip prefix
+		df_forced_phot['objectId'] = obj_id
+		list_of_dfs.append(df_forced_phot)
+
+	all_objects_df = pd.concat(list_of_dfs)
+
+	return all_objects_df
 
 
 def merge_features_tdes_SN(csv_tdes, csv_other, out_csv):
@@ -82,19 +101,73 @@ def crop_lc_to_rsing_part(converted_df: pd.DataFrame, minimum_nb_obs: int = 3, s
 	return converted_df_early
 
 
+def is_unique(s):
+	""" Check if all values of a (pandas) series are equal. """
+	a = s.to_numpy()
+	return (a[0] == a).all()
+
+
+def find_objectId_for_forced_phot_data(forced_phot_fname, df_fink, deg_tolerance = 0.001):
+	"""
+	Correlate the forced photometry data with the Fink data, to find the object ID corresponding
+	to the forced-photometry data file.
+
+	Parameters
+	----------
+	forced_phot_fname : str
+		filename containing the forced_phot data of one object.
+	df_fink : pd.DataFrame
+		Data from Fink with all the objects at interest.
+	deg_tolerance : float, optional
+		Margin in degrees, for the search in RA and DEC. The default is 0.001.
+
+	Returns
+	-------
+	obj_id : str
+		Object Identifier.
+
+	"""
+
+
+	with open(forced_phot_fname) as f:
+	    for i, line in enumerate(f):
+	        if i == 3:
+	            req_ra = float(line.split(' ')[-2])
+	        elif i ==4:
+	            req_dec = float(line.split(' ')[-2])
+	        elif i > 4:
+	            break
+
+	df_obj = df_fink[(df_fink.ra > req_ra - deg_tolerance) & (df_fink.ra < req_ra + deg_tolerance) &
+			 (df_fink.dec > req_dec - deg_tolerance) & (df_fink.dec < req_dec + deg_tolerance)]
+	if len(df_obj) == 0:
+		print('Error while correlating the forced-phometry data with the objectId: '+
+				'No object was found in this position, for ' + forced_phot_fname)
+
+		obj_id = None
+
+	elif is_unique(df_obj.objectId):
+		obj_id = df_obj.objectId.iloc[0]
+
+	else:
+		print('Error while correlating the forced-phometry data with the objectId: '+
+				'more than one object are within the given position given.')
+		obj_id = None
+	return obj_id
+
 if __name__ == '__main__':
 
 	# Get data and prepare for fitting
-# 	df = get_data_from_FINK(save = False)
-	df = pd.read_csv('ZTF_TDE_Data/from_Fink.csv')
-	converted_df = sn_tools.convert_full_dataset(df, obj_id_header='objectId')
-	converted_df_early = crop_lc_to_rsing_part(converted_df)
+# 	fink_df = get_data_from_FINK(save = False)
+	fink_df = pd.read_csv('ZTF_TDE_Data/from_Fink.csv')
+	df = load_forced_photometry_data(fink_df)
+# 	converted_df = sn_tools.convert_full_dataset(df, obj_id_header='objectId')
+# 	converted_df_early = crop_lc_to_rsing_part(converted_df)
 
-	# Obtain features and save
-	feature_matrix = sn_tools.featurize_full_dataset(converted_df_early, screen = True)
-	feature_matrix.to_csv('Features_check/features_tdes.csv', index = None)
-	merge_features_tdes_SN('Features_check/features_tdes.csv', 'Features_check/features.csv',
-						   'Features_check/merged_features.csv')
-
+# 	# Obtain features and save
+# 	feature_matrix = sn_tools.featurize_full_dataset(converted_df_early, screen = True)
+# 	feature_matrix.to_csv('Features_check/features_tdes.csv', index = None)
+# 	merge_features_tdes_SN('Features_check/features_tdes.csv', 'Features_check/features.csv',
+# 						   'Features_check/merged_features.csv')
 
 

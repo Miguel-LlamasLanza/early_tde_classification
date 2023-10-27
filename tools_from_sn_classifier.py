@@ -25,7 +25,7 @@ def convert_full_dataset(pdf: pd.DataFrame, obj_id_header='candid'):
 	Parameters
 	----------
 	pdf: pd.DataFrame
-		Read directly from parquet files.
+		DataFrame with same format as the parquet files.
 	obj_id_header: str (optional)
 		Object identifier. Options are ['objectId', 'candid'].
 		Default is 'candid'.
