@@ -29,10 +29,27 @@ def get_data_from_FINK(save = True):
 	df.columns = df.columns.str.strip('i:')  # strip prefix
 	if save:
 		df.to_csv('ZTF_TDE_Data/from_Fink.csv', index = None)
-	return df
+
+	tdes_not_in_fink_data = [x for x in ztf_names if x not in fink_df.objectId.unique()]
+	return df, tdes_not_in_fink_data
 
 
 def load_forced_photometry_data(fink_df):
+	"""
+	Load forced photometry data, and crossmatch with Fink data positions.
+	Conversion of some columns to be like fink data.
+
+	Parameters
+	----------
+	fink_df : TYPE
+		DESCRIPTION.
+
+	Returns
+	-------
+	all_objects_df : TYPE
+		DESCRIPTION.
+
+	"""
 
 
 	# Load forced-photometry data
@@ -47,10 +64,51 @@ def load_forced_photometry_data(fink_df):
 
 	all_objects_df = pd.concat(list_of_dfs)
 
+	all_objects_df.dropna(subset=['objectId'], inplace=True)
+	all_objects_df = all_objects_df[all_objects_df['forcediffimflux'] > (-1000)]
+
 	return all_objects_df
 
 
+def diff_phot(forcediffimflux, forcediffimfluxunc, zpdiff, SNT=3, SNU=5, set_to_nan=True):
+    """
+	Get magpsf and sigmapsf from forced photometry parameters. Function provided by Julien.
+    """
+    if (forcediffimflux / forcediffimfluxunc) > SNT:
+        # we have a confident detection, compute and plot mag with error bar:
+        mag = zpdiff - 2.5 * np.log10(forcediffimflux)
+        err = 1.0857 * forcediffimfluxunc / forcediffimflux
+    else:
+        # compute flux upper limit and plot as arrow:
+        if not set_to_nan:
+            mag = zpdiff - 2.5 * np.log10(SNU * forcediffimfluxunc)
+        else:
+            mag = np.nan
+        err = np.nan
+
+    return mag, err
+
+
+
+
 def merge_features_tdes_SN(csv_tdes, csv_other, out_csv):
+	"""
+	Merges the new features obtained for TDEs with those from the SN study.
+
+	Parameters
+	----------
+	csv_tdes : TYPE
+		DESCRIPTION.
+	csv_other : TYPE
+		DESCRIPTION.
+	out_csv : TYPE
+		DESCRIPTION.
+
+	Returns
+	-------
+	None.
+
+	"""
 
 	feat_tdes = pd.read_csv(csv_tdes)
 	feat_other = pd.read_csv(csv_other)
@@ -87,9 +145,10 @@ def crop_lc_to_rsing_part(converted_df: pd.DataFrame, minimum_nb_obs: int = 3, s
 
 		name = np.unique(converted_df['id'].values)[indx]
 		obj_flag = converted_df['id'].values == name
+		obj_df = converted_df[obj_flag]
 
 		for filt in ['g', 'r']:
-			object_df = converted_df[obj_flag][converted_df['FLT'] == filt].copy()
+			object_df = obj_df[obj_df['FLT'] == filt].copy()
 			if len(object_df) > minimum_nb_obs:
 				tmax = object_df['MJD'][object_df['FLUXCAL'].idxmax()]
 				object_df = object_df[object_df.MJD <= tmax]
@@ -137,7 +196,7 @@ def find_objectId_for_forced_phot_data(forced_phot_fname, df_fink, deg_tolerance
 	            req_dec = float(line.split(' ')[-2])
 	        elif i > 4:
 	            break
-
+	# TODO: do it with astropy
 	df_obj = df_fink[(df_fink.ra > req_ra - deg_tolerance) & (df_fink.ra < req_ra + deg_tolerance) &
 			 (df_fink.dec > req_dec - deg_tolerance) & (df_fink.dec < req_dec + deg_tolerance)]
 	if len(df_obj) == 0:
@@ -155,19 +214,58 @@ def find_objectId_for_forced_phot_data(forced_phot_fname, df_fink, deg_tolerance
 		obj_id = None
 	return obj_id
 
+def convert_forced_phot_df(df):
+
+	df.rename(columns = {'forcediffimflux': 'FLUXCAL',
+					  'forcediffimfluxunc': 'FLUXCALERR',
+					  'objectId' : 'id',
+					  'jd': 'MJD'}, inplace = True)
+
+# 	df.loc[df['filter'] == 'ZTF_g', 'FLT'] = int(1)
+# 	df.loc[df['filter'] == 'ZTF_r', 'FLT'] = int(2)
+# 	df.loc[df['filter'] == 'ZTF_i', 'FLT'] = int(3)
+
+	df['FLT']  = df['filter'].str[-1]
+	df['type'] = 'TDE'
+	df.reset_index(inplace = True)
+
+	return df[['id', 'type', 'MJD', 'FLT', 'FLUXCAL', 'FLUXCALERR']]
+
+"""
+def convert_df(df, origin_df = 'fink'):
+	# TODO: Cleanup script, do not convert flux to magnitude and bak to flux for forced phot.
+	# A function like this could be used for the conversion.
+
+	if origin_df == 'fink':
+		converted_df = sn_tools.convert_full_dataset(df, obj_id_header='objectId')
+	elif origin_df == 'forced_phot':
+		converted_df = convert_forced_phot_df(df)
+"""
+
 if __name__ == '__main__':
 
+	data_origin = 'forced_phot'
 	# Get data and prepare for fitting
-# 	fink_df = get_data_from_FINK(save = False)
+# 	fink_df,_ = get_data_from_FINK(save = False)
 	fink_df = pd.read_csv('ZTF_TDE_Data/from_Fink.csv')
-	df = load_forced_photometry_data(fink_df)
-# 	converted_df = sn_tools.convert_full_dataset(df, obj_id_header='objectId')
-# 	converted_df_early = crop_lc_to_rsing_part(converted_df)
+
+	if data_origin =='forced_phot':
+		df = load_forced_photometry_data(fink_df)
+		converted_df = convert_forced_phot_df(df)
+	elif data_origin == 'fink':
+		converted_df = sn_tools.convert_full_dataset(fink_df, obj_id_header='objectId')
+	else:
+		print('wrong string given')
+
+	converted_df_early = crop_lc_to_rsing_part(converted_df)
+	converted_df_early = converted_df
+
+
 
 # 	# Obtain features and save
-# 	feature_matrix = sn_tools.featurize_full_dataset(converted_df_early, screen = True)
-# 	feature_matrix.to_csv('Features_check/features_tdes.csv', index = None)
-# 	merge_features_tdes_SN('Features_check/features_tdes.csv', 'Features_check/features.csv',
-# 						   'Features_check/merged_features.csv')
+	feature_matrix = sn_tools.featurize_full_dataset(converted_df_early, screen = True)
+	feature_matrix.to_csv('Features_check/features_tdes.csv', index = None)
+	merge_features_tdes_SN('Features_check/features_tdes.csv', 'Features_check/features.csv',
+						   'Features_check/merged_features.csv')
 
 

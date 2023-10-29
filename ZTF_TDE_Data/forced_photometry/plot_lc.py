@@ -17,9 +17,9 @@ def diff_phot(forcediffimflux, forcediffimfluxunc, zpdiff, SNT=3, SNU=5, set_to_
         else:
             mag = np.nan
         err = np.nan
-        
+
     return mag, err
-    
+
 def apparent_flux(magpsf, sigmapsf, magnr, sigmagnr, magzpsci):
     """ Compute apparent flux from difference magnitude supplied by ZTF
     This was heavily influenced by the computation provided by Lasair:
@@ -102,6 +102,12 @@ def dc_mag(magpsf, sigmapsf, magnr, sigmagnr, magzpsci):
     return dc_mag, dc_sigmag
 
 pdf = pd.read_csv(sys.argv[1], comment='#', sep=' ')
+
+# list_fnames = ['batchfp_req0000167814_lc.txt', 'batchfp_req0000167806_lc.txt', 'batchfp_req0000167813_lc.txt',
+# 			   'batchfp_req0000167815_lc.txt' , 'batchfp_req0000167805_lc.txt', 'batchfp_req0000167808_lc.txt',
+# 			   'batchfp_req0000167802_lc.txt', 'batchfp_req0000167809_lc.txt']
+
+
 
 pdf = pdf\
     .drop(columns=['Unnamed: 0'])\

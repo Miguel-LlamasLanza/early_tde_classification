@@ -397,10 +397,10 @@ def get_sigmoid_features_elasticc(data_all: pd.DataFrame,
         data_tmp = filter_data(data_all, i)
 
         max_fluxcal = max(data_tmp['FLUXCAL'])
-        mjd = data_temp['MJD'].values
+        mjd = data_tmp['MJD'].values
 
         if(max_fluxcal > cutoff_max) and \
-            max_fluxcal == data_temp['FLUXCAL'].values[np.argsort(mjd)[-1]]:
+            max_fluxcal == data_tmp['FLUXCAL'].values[np.argsort(mjd)[-1]]:
 
             # average over intraday data points
             data_tmp_avg = average_intraday_data(data_tmp)

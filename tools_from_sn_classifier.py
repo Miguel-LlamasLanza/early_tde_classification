@@ -16,9 +16,6 @@ import matplotlib.pyplot as plt
 # https://github.com/emilleishida/fink_sn_activelearning/tree/master
 
 
-
-
-
 def convert_full_dataset(pdf: pd.DataFrame, obj_id_header='candid'):
 	"""Convert an entire data set from mag to fluxcal.
 
@@ -48,7 +45,6 @@ def convert_full_dataset(pdf: pd.DataFrame, obj_id_header='candid'):
 	for index in range(pdf.shape[0]):
 
 		name = pdf[obj_id_header].values[index]
-
 
 		try:
 			sntype_orig = pdf['TNS'].values[index]
