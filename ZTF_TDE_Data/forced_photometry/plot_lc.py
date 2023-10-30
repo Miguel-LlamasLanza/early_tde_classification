@@ -1,7 +1,10 @@
+""" Plot forced photometry lightcurve
+"""
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 import sys
+import argparse
 
 def diff_phot(forcediffimflux, forcediffimfluxunc, zpdiff, SNT=3, SNU=5, set_to_nan=True):
     """
@@ -101,58 +104,101 @@ def dc_mag(magpsf, sigmapsf, magnr, sigmagnr, magzpsci):
 
     return dc_mag, dc_sigmag
 
-pdf = pd.read_csv(sys.argv[1], comment='#', sep=' ')
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument(
+    '-filename', type=str, default='',
+    help="""
+    Path to file containing forced photometry
+    """
+)
+parser.add_argument(
+    '-units', type=str, default='',
+    help="""
+    Unit system: `mag` or `flux`
+    """
+)
+parser.add_argument(
+    '--quality_cuts', action="store_true",
+    help="""
+    If specified, apply quality cuts
+    """
+)
+args = parser.parse_args(None)
 
-# list_fnames = ['batchfp_req0000167814_lc.txt', 'batchfp_req0000167806_lc.txt', 'batchfp_req0000167813_lc.txt',
-# 			   'batchfp_req0000167815_lc.txt' , 'batchfp_req0000167805_lc.txt', 'batchfp_req0000167808_lc.txt',
-# 			   'batchfp_req0000167802_lc.txt', 'batchfp_req0000167809_lc.txt']
-
-
+pdf = pd.read_csv(args.filename, comment='#', sep=' ')
 
 pdf = pdf\
     .drop(columns=['Unnamed: 0'])\
     .rename(lambda x: x.split(',')[0], axis='columns')
 
 
-magpsf, sigmapsf = np.transpose(
-    [
-        diff_phot(*args) for args in zip(
-            pdf['forcediffimflux'],
-            pdf['forcediffimfluxunc'].values,
-            pdf['zpdiff'].values,
-        )
-    ]
-)
-
-mag_dc, err_dc = np.transpose(
-    [
-        dc_mag(*args) for args in zip(
-            magpsf,
-            sigmapsf,
-            pdf['nearestrefmag'].values,
-            pdf['nearestrefmagunc'].values,
-            pdf['zpmaginpsci'].values,
-        )
-    ]
-)
-
-fig = plt.figure(figsize=(15, 7))
-for filt in np.unique(pdf['filter']):
-    mask = pdf['filter'] == filt
-    mask *= err_dc == err_dc
-    sub = pdf[mask]
-    plt.errorbar(
-        sub['jd'].apply(lambda x: x - 2400000.5),
-        mag_dc[mask],
-        err_dc[mask],
-        ls='',
-        marker='o',
-        label=filt
+if args.units == 'mag':
+    magpsf, sigmapsf = np.transpose(
+        [
+            diff_phot(*args_, SNT=3, SNU=5, set_to_nan=args.quality_cuts) for args_ in zip(
+                pdf['forcediffimflux'],
+                pdf['forcediffimfluxunc'].values,
+                pdf['zpdiff'].values,
+            )
+        ]
     )
 
-fig.gca().invert_yaxis()
-plt.legend();
-plt.title('Magnitude from forced photometry')
-plt.xlabel('Modified Julian Date [UTC]')
-plt.ylabel('DC magnitude');
-plt.show()
+    mag_dc, err_dc = np.transpose(
+        [
+            dc_mag(*args_) for args_ in zip(
+                magpsf,
+                sigmapsf,
+                pdf['nearestrefmag'].values,
+                pdf['nearestrefmagunc'].values,
+                pdf['zpmaginpsci'].values,
+            )
+        ]
+    )
+
+    fig = plt.figure(figsize=(15, 7))
+    for filt in np.unique(pdf['filter']):
+        mask = pdf['filter'] == filt
+        if args.quality_cuts:
+            # Keep only measurements with flag = 0
+            mask *= pdf['infobitssci'] == 0
+        mask *= err_dc == err_dc
+        sub = pdf[mask]
+        plt.errorbar(
+            sub['jd'].apply(lambda x: x - 2400000.5),
+            mag_dc[mask],
+            err_dc[mask],
+            ls='',
+            marker='o',
+            label=filt
+        )
+
+    fig.gca().invert_yaxis()
+    plt.legend();
+    plt.title('DC magnitude from forced photometry')
+    plt.xlabel('Modified Julian Date [UTC]')
+    plt.ylabel('DC magnitude');
+    plt.show()
+
+elif args.units == 'flux':
+    fig = plt.figure(figsize=(15, 7))
+    for filt in np.unique(pdf['filter']):
+        mask = pdf['filter'] == filt
+        if args.quality_cuts:
+            # Keep only measurements with flag = 0
+            mask *= pdf['infobitssci'] == 0
+        mask *= pdf['forcediffimfluxunc'].values > 0
+        sub = pdf[mask]
+        plt.errorbar(
+            sub['jd'].apply(lambda x: x - 2400000.5),
+            sub['forcediffimflux'],
+            sub['forcediffimfluxunc'],
+            ls='',
+            marker='o',
+            label=filt
+        )
+
+    plt.legend();
+    plt.title('Difference flux from forced photometry')
+    plt.xlabel('Modified Julian Date [UTC]')
+    plt.ylabel('DC flux');
+    plt.show()
