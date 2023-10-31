@@ -73,7 +73,7 @@ def load_forced_photometry_data(fink_df, quality_cuts = True, SNT_thresh = 3):
 	if quality_cuts:
 		all_objects_df = all_objects_df[(all_objects_df['infobitssci'] == 0)
 		& (all_objects_df['forcediffimflux'] / all_objects_df['forcediffimfluxunc'] > SNT_thresh)]
-	all_objects_df = all_objects_df[all_objects_df['forcediffimflux'] > (-1000)]
+	# all_objects_df = all_objects_df[all_objects_df['forcediffimflux'] > (-1000)]
 
 	return all_objects_df
 
@@ -289,6 +289,7 @@ if __name__ == '__main__':
 		sys.exit()
 
 	# converted_df_early = converted_df
+	converted_df_early.to_csv('data_for_feat_extractor.csv', index = False)
 
 # 	# Obtain features and save
 	feature_matrix = sn_tools.featurize_full_dataset(converted_df_early, screen = True)

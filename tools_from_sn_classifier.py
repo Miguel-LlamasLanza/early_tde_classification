@@ -122,7 +122,7 @@ def featurize_full_dataset(lc: pd.DataFrame, screen=False):
 	for indx in range(np.unique(lc['id'].values).shape[0]):
 
 		if screen:
-			print('indx: ', indx)
+			print(r'indx: {}'.format(indx), end='\r')
 
 		name = np.unique(lc['id'].values)[indx]
 
@@ -153,9 +153,11 @@ def featurize_full_dataset(lc: pd.DataFrame, screen=False):
 				] = features
 
 			plt.figure()
+			# ax = plt.gca()
 			plt.title(name)
 			plt.xlabel('Time (days)')
 			plt.ylabel('Fluxcal')
+			# ax.text(0.1, 0.9, 'b_g: {}\n b_r: {}'.format(b['g'], b['r'], transform=ax.transAxes))
 			for filt, color in zip(['g', 'r'], ['#15284F', '#F5622E']):
 
 				# mask_filt = mask[filt]
