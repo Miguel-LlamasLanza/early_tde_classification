@@ -4,16 +4,21 @@ import glob
 import pandas as pd
 from io import BytesIO
 import sys
+import os
 import tools_from_sn_classifier as sn_tools
 
 
-def get_data_from_FINK(save = True):
+def get_data_from_FINK(save = True, extended = False):
 
 	# Get object names
 	TDEs_hammerstein = pd.read_fwf('ZTF_TDE_Data/Table1_Hammerstein', skiprows = 34, header = None)
 	ztf_names = TDEs_hammerstein[1].to_list()
 
-	what_to_retrieve = ['i:jd', 'i:fid', 'i:magpsf', 'i:sigmapsf', 'i:candid', 'i:objectId', 'i:ra', 'i:dec']
+	what_to_retrieve = ['i:jd', 'i:fid', 'i:magpsf', 'i:sigmapsf', 'i:candid', 'i:objectId',
+					 'i:ra', 'i:dec']
+	if extended:
+		extra_cols = ['d:snn_sn_vs_all', 'd:snn_snia_vs_nonia']
+		what_to_retrieve = what_to_retrieve + extra_cols
 
 	r = requests.post('https://fink-portal.org/api/v1/objects',
 	  json={
@@ -21,20 +26,19 @@ def get_data_from_FINK(save = True):
 		  'columns': ','.join(what_to_retrieve)
 	  }
 	)
-	df = pd.read_json(BytesIO(r.content))
+	fink_df = pd.read_json(BytesIO(r.content))
 
-# 	df = df.rename(columns = {'i:jd': 'jd', 'i:fid': 'fid', 'i:magpsf': 'magpsf',
-# 						   'i:sigmapsf': 'sigmapsf','i:candid': 'candid',
-# 						   'i:objectId': 'objectId'})
-	df.columns = df.columns.str.strip('i:')  # strip prefix
+	fink_df.columns = fink_df.columns.str.lstrip('i:')  # strip prefix
+	# fink_df.columns = fink_df.columns.str.lstrip('d:')  # strip prefix
+
 	if save:
-		df.to_csv('ZTF_TDE_Data/from_Fink.csv', index = None)
+		fink_df.to_csv('ZTF_TDE_Data/from_Fink.csv', index = None)
 
 	tdes_not_in_fink_data = [x for x in ztf_names if x not in fink_df.objectId.unique()]
-	return df, tdes_not_in_fink_data
+	return fink_df, tdes_not_in_fink_data
 
 
-def load_forced_photometry_data(fink_df):
+def load_forced_photometry_data(fink_df, quality_cuts = True, SNT_thresh = 3):
 	"""
 	Load forced photometry data, and crossmatch with Fink data positions.
 	Conversion of some columns to be like fink data.
@@ -51,20 +55,24 @@ def load_forced_photometry_data(fink_df):
 
 	"""
 
-
 	# Load forced-photometry data
 	forced_phot_data = glob.glob('ZTF_TDE_Data/forced_photometry/batchfp_*.txt')
 	list_of_dfs = []
 	for forced_phot_fname in forced_phot_data:
 		obj_id = find_objectId_for_forced_phot_data(forced_phot_fname, fink_df)
-		df_forced_phot = pd.read_csv(forced_phot_fname, comment = '#', sep = ' ')
-		df_forced_phot.columns = df_forced_phot.columns.str.strip(',')  # strip prefix
-		df_forced_phot['objectId'] = obj_id
-		list_of_dfs.append(df_forced_phot)
+		df_fp = pd.read_csv(forced_phot_fname, comment = '#', sep = ' ')
+		df_fp.columns = df_fp.columns.str.strip(',')  # strip prefix
+		df_fp['objectId'] = obj_id
+		df_fp['fp_fname'] = os.path.basename(forced_phot_fname)
+		list_of_dfs.append(df_fp)
 
 	all_objects_df = pd.concat(list_of_dfs)
 
 	all_objects_df.dropna(subset=['objectId'], inplace=True)
+
+	if quality_cuts:
+		all_objects_df = all_objects_df[(all_objects_df['infobitssci'] == 0)
+		& (all_objects_df['forcediffimflux'] / all_objects_df['forcediffimfluxunc'] > SNT_thresh)]
 	all_objects_df = all_objects_df[all_objects_df['forcediffimflux'] > (-1000)]
 
 	return all_objects_df
@@ -87,8 +95,6 @@ def diff_phot(forcediffimflux, forcediffimfluxunc, zpdiff, SNT=3, SNU=5, set_to_
         err = np.nan
 
     return mag, err
-
-
 
 
 def merge_features_tdes_SN(csv_tdes, csv_other, out_csv):
@@ -160,6 +166,22 @@ def crop_lc_to_rsing_part(converted_df: pd.DataFrame, minimum_nb_obs: int = 3, s
 	return converted_df_early
 
 
+def crop_lc_based_on_csv_values(df):
+
+
+	# Hard-code csv filename and read
+	csv_fname = 'ZTF_TDE_Data/forced_photometry/TimeParametersTDEs_training.csv'
+	times_csv = pd.read_csv(csv_fname)
+
+	# Crossmatch csvs and cut LCs
+	merged_csv = df.merge(times_csv, left_on = 'fp_fname', right_on = 'Filename')
+
+	converted_df_early = df[(merged_csv.MJD >= merged_csv['Start (MJD)'] + 2400000.5)
+						  & (merged_csv.MJD <= merged_csv['Peak (MJD)'] + 2400000.5)]
+	return converted_df_early
+
+
+
 def is_unique(s):
 	""" Check if all values of a (pandas) series are equal. """
 	a = s.to_numpy()
@@ -187,7 +209,6 @@ def find_objectId_for_forced_phot_data(forced_phot_fname, df_fink, deg_tolerance
 
 	"""
 
-
 	with open(forced_phot_fname) as f:
 	    for i, line in enumerate(f):
 	        if i == 3:
@@ -196,6 +217,7 @@ def find_objectId_for_forced_phot_data(forced_phot_fname, df_fink, deg_tolerance
 	            req_dec = float(line.split(' ')[-2])
 	        elif i > 4:
 	            break
+
 	# TODO: do it with astropy
 	df_obj = df_fink[(df_fink.ra > req_ra - deg_tolerance) & (df_fink.ra < req_ra + deg_tolerance) &
 			 (df_fink.dec > req_dec - deg_tolerance) & (df_fink.dec < req_dec + deg_tolerance)]
@@ -203,7 +225,7 @@ def find_objectId_for_forced_phot_data(forced_phot_fname, df_fink, deg_tolerance
 		print('Error while correlating the forced-phometry data with the objectId: '+
 				'No object was found in this position, for ' + forced_phot_fname)
 
-		obj_id = None
+		obj_id = os.path.basename(forced_phot_fname)
 
 	elif is_unique(df_obj.objectId):
 		obj_id = df_obj.objectId.iloc[0]
@@ -214,6 +236,7 @@ def find_objectId_for_forced_phot_data(forced_phot_fname, df_fink, deg_tolerance
 		obj_id = None
 	return obj_id
 
+
 def convert_forced_phot_df(df):
 
 	df.rename(columns = {'forcediffimflux': 'FLUXCAL',
@@ -221,33 +244,15 @@ def convert_forced_phot_df(df):
 					  'objectId' : 'id',
 					  'jd': 'MJD'}, inplace = True)
 
-# 	df.loc[df['filter'] == 'ZTF_g', 'FLT'] = int(1)
-# 	df.loc[df['filter'] == 'ZTF_r', 'FLT'] = int(2)
-# 	df.loc[df['filter'] == 'ZTF_i', 'FLT'] = int(3)
-
 	df['FLT']  = df['filter'].str[-1]
 	df['type'] = 'TDE'
 	df.reset_index(inplace = True)
 
-	return df[['id', 'type', 'MJD', 'FLT', 'FLUXCAL', 'FLUXCALERR']]
+	return df[['id', 'type', 'MJD', 'FLT', 'FLUXCAL', 'FLUXCALERR', 'fp_fname']]
 
-"""
-def convert_df(df, origin_df = 'fink'):
-	# TODO: Cleanup script, do not convert flux to magnitude and bak to flux for forced phot.
-	# A function like this could be used for the conversion.
 
-	if origin_df == 'fink':
-		converted_df = sn_tools.convert_full_dataset(df, obj_id_header='objectId')
-	elif origin_df == 'forced_phot':
-		converted_df = convert_forced_phot_df(df)
-"""
+def convert_df(fink_df, data_origin = 'fink'):
 
-if __name__ == '__main__':
-
-	data_origin = 'forced_phot'
-	# Get data and prepare for fitting
-# 	fink_df,_ = get_data_from_FINK(save = False)
-	fink_df = pd.read_csv('ZTF_TDE_Data/from_Fink.csv')
 
 	if data_origin =='forced_phot':
 		df = load_forced_photometry_data(fink_df)
@@ -256,11 +261,28 @@ if __name__ == '__main__':
 		converted_df = sn_tools.convert_full_dataset(fink_df, obj_id_header='objectId')
 	else:
 		print('wrong string given')
+		sys.exit()
+	return converted_df
 
-	converted_df_early = crop_lc_to_rsing_part(converted_df)
-	converted_df_early = converted_df
 
+if __name__ == '__main__':
 
+	data_origin = 'forced_phot'
+	# Get data and prepare for fitting
+	fink_df,_ = get_data_from_FINK(save = True, extended = True)
+
+	fink_df = pd.read_csv('ZTF_TDE_Data/from_Fink.csv')
+	converted_df = convert_df(fink_df, data_origin)
+
+	if data_origin == 'fink':
+		converted_df_early = crop_lc_to_rsing_part(converted_df)
+	elif data_origin =='forced_phot':
+		converted_df_early = crop_lc_based_on_csv_values(converted_df)
+	else:
+		print('wrong string given')
+		sys.exit()
+
+	# converted_df_early = converted_df
 
 # 	# Obtain features and save
 	feature_matrix = sn_tools.featurize_full_dataset(converted_df_early, screen = True)

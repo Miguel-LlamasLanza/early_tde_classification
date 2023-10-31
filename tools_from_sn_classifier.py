@@ -159,7 +159,7 @@ def featurize_full_dataset(lc: pd.DataFrame, screen=False):
 			for filt, color in zip(['g', 'r'], ['#15284F', '#F5622E']):
 
 				# mask_filt = mask[filt]
-				masked_lc = lc[obj_flag][lc['FLT']==filt]
+				masked_lc = lc[(obj_flag) & (lc['FLT']==filt)]
 
 				if len(masked_lc)!=0:
 
