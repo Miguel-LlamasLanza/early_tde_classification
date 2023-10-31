@@ -239,10 +239,16 @@ def find_objectId_for_forced_phot_data(forced_phot_fname, df_fink, deg_tolerance
 
 def convert_forced_phot_df(df):
 
-	df.rename(columns = {'forcediffimflux': 'FLUXCAL',
-					  'forcediffimfluxunc': 'FLUXCALERR',
-					  'objectId' : 'id',
+# 	df.rename(columns = {'forcediffimflux': 'FLUXCAL',
+# 					  'forcediffimfluxunc': 'FLUXCALERR',
+	df.rename(columns = { 'objectId' : 'id',
 					  'jd': 'MJD'}, inplace = True)
+	df['magpsf'] = df['zpdiff'] - 2.5 * np.log10(df['forcediffimflux'])
+	df['FLUXCAL'] = 10 ** (-0.4 * df['magpsf']) * 10 ** (11)
+
+	df['sigmapsf'] = 1.0857 * df['forcediffimfluxunc'] / df['forcediffimflux']
+	df['FLUXCALERR'] =  9.21034 * 10 ** 10 * np.exp(-0.921034 * df['magpsf']) * df['sigmapsf']
+
 
 	df['FLT']  = df['filter'].str[-1]
 	df['type'] = 'TDE'
