@@ -5,7 +5,10 @@ import pandas as pd
 from io import BytesIO
 import sys
 import os
+import matplotlib.pyplot as plt
 import tools_from_sn_classifier as sn_tools
+from light_curve.light_curve_py import RainbowFit
+
 
 
 def get_data_from_FINK(save = True, extended = False):
@@ -79,22 +82,22 @@ def load_forced_photometry_data(fink_df, quality_cuts = True, SNT_thresh = 3):
 
 
 def diff_phot(forcediffimflux, forcediffimfluxunc, zpdiff, SNT=3, SNU=5, set_to_nan=True):
-    """
+	"""
 	Get magpsf and sigmapsf from forced photometry parameters. Function provided by Julien.
-    """
-    if (forcediffimflux / forcediffimfluxunc) > SNT:
-        # we have a confident detection, compute and plot mag with error bar:
-        mag = zpdiff - 2.5 * np.log10(forcediffimflux)
-        err = 1.0857 * forcediffimfluxunc / forcediffimflux
-    else:
-        # compute flux upper limit and plot as arrow:
-        if not set_to_nan:
-            mag = zpdiff - 2.5 * np.log10(SNU * forcediffimfluxunc)
-        else:
-            mag = np.nan
-        err = np.nan
+	"""
+	if (forcediffimflux / forcediffimfluxunc) > SNT:
+		# we have a confident detection, compute and plot mag with error bar:
+		mag = zpdiff - 2.5 * np.log10(forcediffimflux)
+		err = 1.0857 * forcediffimfluxunc / forcediffimflux
+	else:
+		# compute flux upper limit and plot as arrow:
+		if not set_to_nan:
+			mag = zpdiff - 2.5 * np.log10(SNU * forcediffimfluxunc)
+		else:
+			mag = np.nan
+		err = np.nan
 
-    return mag, err
+	return mag, err
 
 
 def merge_features_tdes_SN(csv_tdes, csv_other, out_csv):
@@ -124,10 +127,12 @@ def merge_features_tdes_SN(csv_tdes, csv_other, out_csv):
 	merged_df.to_csv(out_csv, index = False)
 
 
-def crop_lc_to_rsing_part(converted_df: pd.DataFrame, minimum_nb_obs: int = 3, save_csv = True):
+def crop_lc_to_rising_part(converted_df: pd.DataFrame, minimum_nb_obs: int = 3, days_to_crop = 100,
+						  save_csv = True):
 	"""
 	Crop the light-curve to retain only the rising part. Drop every observation after the max flux.
 	Keep observations of an object only if the object presents at least "minimum_nb_obs" observations.
+	We crop the beginning to be 100 days before the maximum flux value.
 	# TODO: Maybe trim based on histogram (get e.g. 90 pr cent)
 
 	Parameters
@@ -157,7 +162,8 @@ def crop_lc_to_rsing_part(converted_df: pd.DataFrame, minimum_nb_obs: int = 3, s
 			object_df = obj_df[obj_df['FLT'] == filt].copy()
 			if len(object_df) > minimum_nb_obs:
 				tmax = object_df['MJD'][object_df['FLUXCAL'].idxmax()]
-				object_df = object_df[object_df.MJD <= tmax]
+				tmin = tmax - days_to_crop - 200
+				object_df = object_df[(object_df.MJD <= tmax) & (object_df.MJD >= tmin)]
 				df_list.append(object_df)
 
 	converted_df_early = pd.concat(df_list)
@@ -210,13 +216,13 @@ def find_objectId_for_forced_phot_data(forced_phot_fname, df_fink, deg_tolerance
 	"""
 
 	with open(forced_phot_fname) as f:
-	    for i, line in enumerate(f):
-	        if i == 3:
-	            req_ra = float(line.split(' ')[-2])
-	        elif i ==4:
-	            req_dec = float(line.split(' ')[-2])
-	        elif i > 4:
-	            break
+		for i, line in enumerate(f):
+			if i == 3:
+				req_ra = float(line.split(' ')[-2])
+			elif i ==4:
+				req_dec = float(line.split(' ')[-2])
+			elif i > 4:
+				break
 
 	# TODO: do it with astropy
 	df_obj = df_fink[(df_fink.ra > req_ra - deg_tolerance) & (df_fink.ra < req_ra + deg_tolerance) &
@@ -271,30 +277,94 @@ def convert_df(fink_df, data_origin = 'fink'):
 	return converted_df
 
 
+def extract_rainbow_feat(df_to_extract, show_plots = False):
+
+	columns = ['id', 'type', 'reference_time', 'amplitude', 'rise_time', 'temperature',
+					'err_reference_time', 'err_amplitude', 'err_rise_time', 'err_temperature']
+	# Effective wavelengths in Angstrom
+	band_wave_aa = {"g": 4770.0, "r": 6231.0, "i": 7625.0}
+	features_all = []
+	for indx in range(np.unique(df_to_extract['id'].values).shape[0]):
+		print('\r Objects processed: {}'.format(indx + 1), end='\r')
+
+		ztf_name = np.unique(df_to_extract['id'].values)[indx]
+		obj_flag = df_to_extract['id'].values == ztf_name
+		obj_df = df_to_extract[obj_flag]
+		sntype = df_to_extract[obj_flag].iloc[0]['type']
+		fp_fname = df_to_extract[obj_flag].fp_fname.iloc[0]
+		obj_df.sort_values('MJD', inplace = True)
+
+		line = [ztf_name, sntype]
+
+		flux = obj_df['FLUXCAL']
+		fluxerr = obj_df['FLUXCALERR']
+		band = obj_df['FLT']
+		norm = flux[band == 'r'].max()
+		flux, fluxerr = flux / norm, fluxerr / norm
+		mjd = obj_df['MJD']
+
+		feature = RainbowFit.from_angstrom(band_wave_aa, with_baseline=False)
+		values, errors = feature(mjd, flux, sigma=fluxerr, band=band)
+
+		line.extend((list(values[:-1]) + list(errors)))
+
+		features_all.append(line)
+
+		if show_plots:
+			X = np.linspace(mjd.min(), mjd.max() + 20, 500)
+
+			plt.figure(figsize=(12, 8))
+
+			colors = ['green', 'red', 'black']
+			for idx, i in enumerate(["g", "r", "i"]):
+				mask = band == i
+				f = flux[mask]
+				ferr = fluxerr[mask]
+				t = mjd[mask]
+				rainbow = feature.model(X, i, values)
+				plt.errorbar(t, f, yerr=ferr, fmt='o', alpha=.7, color=colors[idx])
+				plt.plot(X, rainbow, linewidth=5, label=i, color=colors[idx])
+				plt.title('{}, {}'.format(ztf_name, fp_fname))
+
+			plt.legend()
+
+
+
+	feature_matrix = pd.DataFrame(features_all, columns=columns)
+	return feature_matrix
+
+
 if __name__ == '__main__':
 
 	data_origin = 'forced_phot'
+	feat_extractor = 'rainbow'
 	# Get data and prepare for fitting
 	fink_df,_ = get_data_from_FINK(save = True, extended = True)
 
 	fink_df = pd.read_csv('ZTF_TDE_Data/from_Fink.csv')
 	converted_df = convert_df(fink_df, data_origin)
 
+	"""
 	if data_origin == 'fink':
-		converted_df_early = crop_lc_to_rsing_part(converted_df)
+		converted_df_early = crop_lc_to_rising_part(converted_df)
 	elif data_origin =='forced_phot':
 		converted_df_early = crop_lc_based_on_csv_values(converted_df)
 	else:
 		print('wrong string given')
 		sys.exit()
+	"""
+	converted_df_early = crop_lc_to_rising_part(converted_df)
 
-	# converted_df_early = converted_df
+	#converted_df_early = converted_df
 	converted_df_early.to_csv('data_for_feat_extractor.csv', index = False)
 
 # 	# Obtain features and save
-	feature_matrix = sn_tools.featurize_full_dataset(converted_df_early, screen = True)
-	feature_matrix.to_csv('Features_check/features_tdes.csv', index = None)
-	merge_features_tdes_SN('Features_check/features_tdes.csv', 'Features_check/features.csv',
-						   'Features_check/merged_features.csv')
+	if feat_extractor == 'rainbow':
+		feature_matrix = extract_rainbow_feat(converted_df_early, show_plots = True)
+		feature_matrix.to_csv('Features_check/rainbow_features_tdes.csv', index = None)
 
-
+	else:
+		feature_matrix = sn_tools.featurize_full_dataset(converted_df_early, screen = True)
+		feature_matrix.to_csv('Features_check/features_tdes.csv', index = None)
+		merge_features_tdes_SN('Features_check/features_tdes.csv', 'Features_check/features.csv',
+							   'Features_check/merged_features.csv')

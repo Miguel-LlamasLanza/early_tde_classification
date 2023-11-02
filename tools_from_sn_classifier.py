@@ -122,7 +122,7 @@ def featurize_full_dataset(lc: pd.DataFrame, screen=False):
 	for indx in range(np.unique(lc['id'].values).shape[0]):
 
 		if screen:
-			print(r'indx: {}'.format(indx), end='\r')
+			print('\r Objects processed: {}'.format(indx + 1), end='\r')
 
 		name = np.unique(lc['id'].values)[indx]
 
