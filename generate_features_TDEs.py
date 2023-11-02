@@ -127,8 +127,8 @@ def merge_features_tdes_SN(csv_tdes, csv_other, out_csv):
 	merged_df.to_csv(out_csv, index = False)
 
 
-def crop_lc_to_rising_part(converted_df: pd.DataFrame, minimum_nb_obs: int = 3, days_to_crop = 200,
-						  save_csv = True):
+def crop_lc_to_rising_part(converted_df: pd.DataFrame, minimum_nb_obs: int = 4, days_to_crop = 200,
+						   nb_points_after_max = 2, save_csv = True):
 	"""
 	Crop the light-curve to retain only the rising part. Drop every observation after the max flux.
 	Keep observations of an object only if the object presents at least "minimum_nb_obs" observations.
@@ -160,11 +160,12 @@ def crop_lc_to_rising_part(converted_df: pd.DataFrame, minimum_nb_obs: int = 3, 
 
 		for filt in ['g', 'r']:
 			object_df = obj_df[obj_df['FLT'] == filt].copy()
-			if len(object_df) > minimum_nb_obs:
-				tmax = object_df['MJD'][object_df['FLUXCAL'].idxmax()]
+			if len(object_df) > 0:
+				tmax = object_df['MJD'][object_df['FLUXCAL'].idxmax()] + 10
 				tmin = tmax - days_to_crop
 				object_df = object_df[(object_df.MJD <= tmax) & (object_df.MJD >= tmin)]
-				df_list.append(object_df)
+				if len(object_df) > minimum_nb_obs:
+					df_list.append(object_df)
 
 	converted_df_early = pd.concat(df_list)
 	if save_csv:
@@ -245,8 +246,6 @@ def find_objectId_for_forced_phot_data(forced_phot_fname, df_fink, deg_tolerance
 
 def convert_forced_phot_df(df):
 
-# 	df.rename(columns = {'forcediffimflux': 'FLUXCAL',
-# 					  'forcediffimfluxunc': 'FLUXCALERR',
 	df.rename(columns = { 'objectId' : 'id',
 					  'jd': 'MJD'}, inplace = True)
 	df['magpsf'] = df['zpdiff'] - 2.5 * np.log10(df['forcediffimflux'])
@@ -285,8 +284,8 @@ def extract_rainbow_feat(df_to_extract, show_plots = True):
 	band_wave_aa = {"g": 4770.0, "r": 6231.0, "i": 7625.0}
 	features_all = []
 	for indx in range(np.unique(df_to_extract['id'].values).shape[0]):
-		print('\r Objects processed: {}'.format(indx + 1), end='\r')
-		#print('Objects processed: {}'.format(indx + 1))
+		#print('\r Objects processed: {}'.format(indx + 1), end='\r')
+		print('Objects processed: {}'.format(indx + 1))
 
 
 		ztf_name = np.unique(df_to_extract['id'].values)[indx]
@@ -295,11 +294,14 @@ def extract_rainbow_feat(df_to_extract, show_plots = True):
 		obj_df = df_to_extract[obj_flag]
 		if len(obj_df) > 4:
 
-			# print('Less than 4 points in LC')
+			print(ztf_name)
 
 			transient_type = df_to_extract[obj_flag].iloc[0]['type']
 
+			obj_df['MJD'] = np.where(obj_df['MJD'].duplicated(keep=False), obj_df['MJD'] +
+							obj_df.groupby('MJD').cumcount().add(0.25).astype(float), obj_df['MJD'])
 			obj_df.sort_values('MJD', inplace = True)
+
 
 			line = [ztf_name, transient_type]
 
@@ -339,7 +341,7 @@ def extract_rainbow_feat(df_to_extract, show_plots = True):
 
 					generated_parameters = np.random.multivariate_normal(features, np.diag(errors)**2,1000)
 					generated_lightcurves = np.array([feature.model(X, i, generated_values) for generated_values in generated_parameters])
-					generated_envelope = np.nanpercentile(generated_lightcurves, [16,84], axis=0)
+					generated_envelope = np.nanpercentile(generated_lightcurves, [16, 84], axis=0)
 					plt.fill_between(X, generated_envelope[0], generated_envelope[1],alpha=0.2,color=colors[idx])
 
 					plt.title('{}, {}'.format(ztf_name, fp_fname))
@@ -414,29 +416,25 @@ def extract_rainbow_feat(df_to_extract, show_plots = True):
 def generate_features_tdes(data_origin = 'forced_phot', feat_extractor = 'rainbow',
 						   overwrite_fink_df = False, debug_flag = False):
 
-	if overwrite_fink_df:
-		fink_df,_ = get_data_from_FINK(save = True, extended = True)
+	if data_origin == 'fink_extended':
+		converted_df = pd.read_csv('ZTF_TDE_Data/all_tde_in_ztf.csv')
+		converted_df['type'] = 'TDE'
 	else:
-		fink_df = pd.read_csv('ZTF_TDE_Data/from_Fink.csv')
+		if overwrite_fink_df:
+			fink_df,_ = get_data_from_FINK(save = True, extended = True)
+		else:
+			fink_df = pd.read_csv('ZTF_TDE_Data/from_Fink.csv')
 
-	converted_df = convert_df(fink_df, data_origin)
+		converted_df = convert_df(fink_df, data_origin)
 
-	"""
-	if data_origin == 'fink':
-		converted_df_early = crop_lc_to_rising_part(converted_df)
-	elif data_origin =='forced_phot':
-		converted_df_early = crop_lc_based_on_csv_values(converted_df)
-	else:
-		print('wrong string given')
-		sys.exit()
-	"""
 	converted_df_early = crop_lc_to_rising_part(converted_df)
+	converted_df_early.drop_duplicates(inplace = True)
 	converted_df_early.to_csv('data_for_feat_extractor.csv', index = False)
 
 # 	# Obtain features and save
 	if feat_extractor == 'rainbow':
-		feature_matrix = extract_rainbow_feat(converted_df_early, show_plots = True)
-		feature_matrix.to_csv('Features_check/rainbow_features_tdes.csv', index = None)
+		feature_matrix = extract_rainbow_feat(converted_df_early, show_plots = False)
+		feature_matrix.to_csv('Features_check/features_rainbow_tdes.csv', index = None)
 
 	else:
 		feature_matrix = sn_tools.featurize_full_dataset(converted_df_early, screen = True)
@@ -473,18 +471,19 @@ def load_data_other_objects():
 if __name__ == '__main__':
 
 	data_origin = 'forced_phot'
+	data_origin = 'fink_extended'
 	feat_extractor = 'rainbow'
 
 	# Get features TDEs
-	#generate_features_tdes(data_origin, feat_extractor, overwrite_fink_df = False)
+	generate_features_tdes(data_origin, feat_extractor, overwrite_fink_df = False)
 
-	# Get features others
-	all_obj_df = load_data_other_objects()
-	converted_df = sn_tools.convert_full_dataset(all_obj_df, obj_id_header='objectId')
-	converted_df.dropna(subset = ['FLUXCALERR', 'FLUXCAL'], inplace = True)
-	converted_df_early = crop_lc_to_rising_part(converted_df)
-	converted_df_early.drop_duplicates(inplace = True)
+# 	# Get features others
+# 	all_obj_df = load_data_other_objects()
+# 	converted_df = sn_tools.convert_full_dataset(all_obj_df, obj_id_header='objectId')
+# 	converted_df.dropna(subset = ['FLUXCALERR', 'FLUXCAL'], inplace = True)
+# 	converted_df_early = crop_lc_to_rising_part(converted_df)
+# 	converted_df_early.drop_duplicates(inplace = True)
 
 
-	features = extract_rainbow_feat(converted_df_early, show_plots = False)
-	features.to_csv('Features_check/features_rainbow_nontdes.csv', index = False)
+# 	features = extract_rainbow_feat(converted_df_early, show_plots = False)
+# 	features.to_csv('Features_check/features_rainbow_nontdes.csv', index = False)
