@@ -43,6 +43,7 @@ def convert_full_dataset(pdf: pd.DataFrame, obj_id_header='candid'):
 	lc_flux_sig = []
 
 	for index in range(pdf.shape[0]):
+		print('\r Objects converted: {}/{}'.format(index + 1, pdf.shape[0]), end='\r')
 
 		name = pdf[obj_id_header].values[index]
 
