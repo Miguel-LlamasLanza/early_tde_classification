@@ -128,7 +128,7 @@ def merge_features_tdes_SN(csv_tdes, csv_other, out_csv):
 
 
 def crop_lc_to_rising_part(converted_df: pd.DataFrame, minimum_nb_obs: int = 4, days_to_crop = 200,
-						   nb_points_after_max = 2, save_csv = True):
+						   nb_points_after_max = 2, save_csv = True, drop_duplicates = True):
 	"""
 	Crop the light-curve to retain only the rising part. Drop every observation after the max flux.
 	Keep observations of an object only if the object presents at least "minimum_nb_obs" observations.
@@ -172,6 +172,8 @@ def crop_lc_to_rising_part(converted_df: pd.DataFrame, minimum_nb_obs: int = 4, 
 			df_list.append(obj_df)
 
 	converted_df_early = pd.concat(df_list)
+	if drop_duplicates:
+		converted_df_early.drop_duplicates(inplace = True)
 	if save_csv:
 		converted_df_early.to_csv('input_for_feature_extractor.csv', index = False)
 	return converted_df_early
@@ -430,9 +432,8 @@ def generate_features_tdes(data_origin = 'forced_phot', feat_extractor = 'rainbo
 
 		converted_df = convert_df(fink_df, data_origin)
 
-	converted_df_early = crop_lc_to_rising_part(converted_df)
-	converted_df_early.drop_duplicates(inplace = True)
-	converted_df_early.to_csv('data_for_feat_extractor.csv', index = False)
+	converted_df_early = crop_lc_to_rising_part(converted_df, save_csv = True)
+
 
 # 	# Obtain features and save
 	if feat_extractor == 'rainbow':
@@ -444,6 +445,7 @@ def generate_features_tdes(data_origin = 'forced_phot', feat_extractor = 'rainbo
 		feature_matrix.to_csv('Features_check/features_tdes.csv', index = None)
 		merge_features_tdes_SN('Features_check/features_tdes.csv', 'Features_check/features.csv',
 							   'Features_check/merged_features.csv')
+
 
 def load_data_other_objects():
 
