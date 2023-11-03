@@ -158,6 +158,9 @@ def crop_lc_to_rising_part(converted_df: pd.DataFrame, minimum_nb_obs: int = 4, 
 		obj_flag = converted_df['id'].values == name
 		obj_df = converted_df[obj_flag]
 		tmax = 0
+		if name == '643489380015010000':
+			obj_df.drop(obj_df['FLUXCAL'].idxmax(), inplace = True)
+
 		for filt in ['g', 'r']:
 			filt_df = obj_df[obj_df['FLT'] == filt].copy()
 			if len(filt_df) > 0:
@@ -187,7 +190,6 @@ def crop_lc_based_on_csv_values(df):
 	converted_df_early = df[(merged_csv.MJD >= merged_csv['Start (MJD)'] + 2400000.5)
 						  & (merged_csv.MJD <= merged_csv['Peak (MJD)'] + 2400000.5)]
 	return converted_df_early
-
 
 
 def is_unique(s):
@@ -279,30 +281,27 @@ def convert_df(fink_df, data_origin = 'fink'):
 
 def extract_rainbow_feat(df_to_extract, show_plots = True):
 
-	columns = ['id', 'type', 'reference_time', 'amplitude', 'rise_time', 'temperature',
+	columns = ['id', 'type', 'reference_time', 'amplitude', 'rise_time', 'temperature', 'r_chisq',
 					'err_reference_time', 'err_amplitude', 'err_rise_time', 'err_temperature']
 	# Effective wavelengths in Angstrom
 	band_wave_aa = {"g": 4770.0, "r": 6231.0, "i": 7625.0}
 	features_all = []
 	for indx in range(np.unique(df_to_extract['id'].values).shape[0]):
-		#print('\r Objects processed: {}'.format(indx + 1), end='\r')
+		# print('\r Objects processed: {}'.format(indx + 1), end='\r')
 		print('Objects processed: {}'.format(indx + 1))
-
 
 		ztf_name = np.unique(df_to_extract['id'].values)[indx]
 
 		obj_flag = df_to_extract['id'].values == ztf_name
 		obj_df = df_to_extract[obj_flag]
+		obj_df['MJD'] = np.where(obj_df['MJD'].duplicated(keep=False), obj_df['MJD'] +
+						obj_df.groupby('MJD').cumcount().add(0.25).astype(float), obj_df['MJD'])
 		if len(obj_df) > 4:
 
+			transient_type = df_to_extract[obj_flag].iloc[0]['type']
 			print(ztf_name)
 
-			transient_type = df_to_extract[obj_flag].iloc[0]['type']
-
-			obj_df['MJD'] = np.where(obj_df['MJD'].duplicated(keep=False), obj_df['MJD'] +
-							obj_df.groupby('MJD').cumcount().add(0.25).astype(float), obj_df['MJD'])
 			obj_df.sort_values('MJD', inplace = True)
-
 
 			line = [ztf_name, transient_type]
 
@@ -312,10 +311,11 @@ def extract_rainbow_feat(df_to_extract, show_plots = True):
 			norm = flux.max()
 			flux, fluxerr = flux / norm, fluxerr / norm
 			mjd = obj_df['MJD']
-			feature = RainbowFit.from_angstrom(band_wave_aa, with_baseline=False)
+			feature = RainbowFit.from_angstrom(band_wave_aa, with_baseline = False)
 			values, errors = feature(mjd, flux, sigma=fluxerr, band=band)
+			r_chisq = values[-1:]
 			features = values[:-1]
-			line.extend((list(features) + list(errors)))
+			line.extend((list(features) + list(r_chisq) + list(errors)))
 
 
 			features_all.append(line)
@@ -339,7 +339,7 @@ def extract_rainbow_feat(df_to_extract, show_plots = True):
 					rainbow = feature.model(X, i, values)
 					plt.errorbar(t, f, yerr=ferr, fmt='o', alpha=.7, color=colors[idx])
 					plt.plot(X, rainbow, linewidth=5, label=i, color=colors[idx])
-
+					# Error plots
 					generated_parameters = np.random.multivariate_normal(features, np.diag(errors)**2,1000)
 					generated_lightcurves = np.array([feature.model(X, i, generated_values) for generated_values in generated_parameters])
 					generated_envelope = np.nanpercentile(generated_lightcurves, [16, 84], axis=0)
@@ -420,6 +420,8 @@ def generate_features_tdes(data_origin = 'forced_phot', feat_extractor = 'rainbo
 	if data_origin == 'fink_extended':
 		converted_df = pd.read_csv('ZTF_TDE_Data/all_tde_in_ztf.csv', dtype={'id': str})
 		converted_df['type'] = 'TDE'
+		converted_df.drop(columns = 'id', inplace=True)
+		converted_df.rename(columns = {'objectId': 'id'}, inplace = True)
 	else:
 		if overwrite_fink_df:
 			fink_df,_ = get_data_from_FINK(save = True, extended = True)
@@ -435,7 +437,7 @@ def generate_features_tdes(data_origin = 'forced_phot', feat_extractor = 'rainbo
 # 	# Obtain features and save
 	if feat_extractor == 'rainbow':
 		feature_matrix = extract_rainbow_feat(converted_df_early, show_plots = True)
-		feature_matrix.to_csv('Features_check/features_rainbow_baseline_tdes.csv', index = None)
+		feature_matrix.to_csv('Features_check/features_rainbow_tdes.csv', index = None)
 
 	else:
 		feature_matrix = sn_tools.featurize_full_dataset(converted_df_early, screen = True)
@@ -486,5 +488,5 @@ if __name__ == '__main__':
 # 	converted_df_early.drop_duplicates(inplace = True)
 
 
-# 	features = extract_rainbow_feat(converted_df_early, show_plots = False)
+# 	features = extract_rainbow_feat(converted_df_early, show_plots = True)
 # 	features.to_csv('Features_check/features_rainbow_nontdes.csv', index = False)
