@@ -417,7 +417,7 @@ def extract_rainbow_feat(df_to_extract, show_plots = True):
 	return feature_matrix
 
 def generate_features_tdes(data_origin = 'forced_phot', feat_extractor = 'rainbow',
-						   overwrite_fink_df = False, debug_flag = False):
+						   overwrite_fink_df = False, show_plots = False):
 
 	if data_origin == 'fink_extended':
 		converted_df = pd.read_csv('ZTF_TDE_Data/all_tde_in_ztf.csv', dtype={'id': str})
@@ -437,13 +437,13 @@ def generate_features_tdes(data_origin = 'forced_phot', feat_extractor = 'rainbo
 
 # 	# Obtain features and save
 	if feat_extractor == 'rainbow':
-		feature_matrix = extract_rainbow_feat(converted_df_early, show_plots = True)
+		feature_matrix = extract_rainbow_feat(converted_df_early, show_plots = show_plots)
 		feature_matrix.to_csv('Features_check/features_rainbow_tdes.csv', index = None)
 
 	else:
 		feature_matrix = sn_tools.featurize_full_dataset(converted_df_early, screen = True)
 		feature_matrix.to_csv('Features_check/features_tdes.csv', index = None)
-		merge_features_tdes_SN('Features_check/features_tdes.csv', 'Features_check/features.csv',
+		merge_features_tdes_SN('Features_check/features_tdes.csv', 'Features_check/features_non_tdes.csv',
 							   'Features_check/merged_features.csv')
 
 
@@ -480,7 +480,7 @@ if __name__ == '__main__':
 	feat_extractor = 'rainbow'
 
 	# Get features TDEs
-	generate_features_tdes(data_origin, feat_extractor, overwrite_fink_df = False)
+	generate_features_tdes(data_origin, feat_extractor, overwrite_fink_df = False, show_plots = False)
 
 # 	# Get features others
 # 	all_obj_df = load_data_other_objects()

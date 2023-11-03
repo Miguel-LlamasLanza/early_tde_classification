@@ -42,7 +42,8 @@ def load_data_other_objects(data_origin = 'all'):
 	all_obj_df = all_obj_df[mask]
 
 	# Rename column
-	all_obj_df.rename(columns = {'TNS': 'type'}, inplace = True)
+	all_obj_df.rename(columns = {'TNS': 'type',
+								  'cdsxmatch': 'type'}, inplace = True)
 
 	logging.info('All files loaded')
 
@@ -72,13 +73,30 @@ def crop_lc_to_rising_time(lc_values, days_to_crop_before = 200):
 	# Mask from minimum to maximum
 	lc_values = lc_values[:, tmin_idx:tmax_idx + 1]
 
-	# Remove alerts with nan values
-	lc_values = lc_values[:, ~np.isnan(lc_values).any(axis=0)]
+
 
 	return lc_values
 
 
 def plot_lightcurve_and_fit(lc_values, filt_list, values_fit, err_fit, ztf_name = ''):
+	"""
+	Plot lightcurve in all bands, with the rainbow fit.
+
+	Parameters
+	----------
+	lc_values : 2d array
+		Values from the lc (mjd, flux, fluxerr, filter).
+	filt_list : list
+		list of filters like ['g', 'r', 'i'].
+	values_fit : list
+		Values from the fit (including chisq).
+	err_fit : list
+		DESCRIPTION.
+	ztf_name : str, optional
+		Object ztf name, to put as plot title.
+
+
+	"""
 
 	mjd, flux, fluxerr, _ = lc_values
 	X = np.linspace(lc_values[0].min() - 10, lc_values[0].max() + 10, 500)
@@ -109,16 +127,18 @@ def plot_lightcurve_and_fit(lc_values, filt_list, values_fit, err_fit, ztf_name 
 def extract_features_for_an_object(row_obj, feature, filt_conv, min_nb_points_fit = 5,
 								    show_plots = False):
 
-
 	name = row_obj.objectId
 	trans_type = row_obj.type
 	lc_values = np.stack(row_obj[['cjd', 'cmagpsf', 'csigmapsf', 'cfid']])
+	# Remove alerts with nan values
+	lc_values = lc_values[:, ~np.isnan(lc_values).any(axis=0)]
+	# Flux conversion
+	lc_values[1], lc_values[2] = mag2fluxcal_snana(lc_values[1], lc_values[2])
 	lc_values = crop_lc_to_rising_time(lc_values)
 	# Delete duplicate times
 	lc_values = np.delete(lc_values, np.where(np.diff(lc_values[0]) == 0)[0], axis = 1)
 
-	# Flux conversion
-	lc_values[1], lc_values[2] = mag2fluxcal_snana(lc_values[1], lc_values[2])
+	# Convert filter list to g, r, i strings
 	filt_list = np.vectorize(filt_conv.get)(lc_values[3].astype(int))
 	# Normalization
 	norm = lc_values[1][-1]
@@ -131,24 +151,37 @@ def extract_features_for_an_object(row_obj, feature, filt_conv, min_nb_points_fi
 			plot_lightcurve_and_fit(lc_values, filt_list, values_fit, err_fit, ztf_name = name)
 
 		return [name, trans_type] + list(values_fit) + list(err_fit)
+	return [name, trans_type] + list(np.full((9), np.nan))
 
 
-data_origin = 'tns'
-all_obj_df = load_data_other_objects(data_origin)
+import datetime as dt
+start = dt.datetime.now()
 
+
+# Params
+data_origin = 'simbad'
+
+# Initialise variables
+csv_file = 'Features_check/features_rainbow_nontdes_{}.csv'.format(data_origin)
 band_wave_aa = {"g": 4770.0, "r": 6231.0, "i": 7625.0}
 filt_conv = {1: "g", 2: "r", 3: "i"}
-
 feature = RainbowFit.from_angstrom(band_wave_aa, with_baseline = False)
-
 columns = ['id', 'type', 'reference_time', 'amplitude', 'rise_time', 'temperature', 'r_chisq',
 				'err_reference_time', 'err_amplitude', 'err_rise_time', 'err_temperature']
 feature_matrix = pd.DataFrame([], columns = columns)
+
+# Load objects
+all_obj_df = load_data_other_objects(data_origin)
+
+# Get features
 feature_matrix[columns] = all_obj_df.apply(
 	lambda x: extract_features_for_an_object(x, feature, filt_conv, show_plots = False),
 											result_type = 'expand', axis = 1)
 feature_matrix.dropna(inplace = True)
-csv_file = 'Features_check/features_rainbow_nontdes_{}.csv'.format(data_origin)
+
+# Save features
 feature_matrix.to_csv(csv_file, index = False)
 
 
+end = dt.datetime.now()
+logging .info("Done in {} seconds.".format(end - start))
