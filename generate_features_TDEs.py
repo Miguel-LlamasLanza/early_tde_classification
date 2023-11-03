@@ -157,15 +157,16 @@ def crop_lc_to_rising_part(converted_df: pd.DataFrame, minimum_nb_obs: int = 4, 
 		name = np.unique(converted_df['id'].values)[indx]
 		obj_flag = converted_df['id'].values == name
 		obj_df = converted_df[obj_flag]
-
+		tmax = 0
 		for filt in ['g', 'r']:
-			object_df = obj_df[obj_df['FLT'] == filt].copy()
-			if len(object_df) > 0:
-				tmax = object_df['MJD'][object_df['FLUXCAL'].idxmax()] + 10
-				tmin = tmax - days_to_crop
-				object_df = object_df[(object_df.MJD <= tmax) & (object_df.MJD >= tmin)]
-				if len(object_df) > minimum_nb_obs:
-					df_list.append(object_df)
+			filt_df = obj_df[obj_df['FLT'] == filt].copy()
+			if len(filt_df) > 0:
+				tmax = max(tmax, filt_df['MJD'][filt_df['FLUXCAL'].idxmax()])
+
+		tmin = tmax - days_to_crop
+		obj_df = obj_df[(obj_df.MJD <= tmax) & (obj_df.MJD >= tmin)]
+		if len(obj_df) > minimum_nb_obs:
+			df_list.append(obj_df)
 
 	converted_df_early = pd.concat(df_list)
 	if save_csv:
@@ -417,7 +418,7 @@ def generate_features_tdes(data_origin = 'forced_phot', feat_extractor = 'rainbo
 						   overwrite_fink_df = False, debug_flag = False):
 
 	if data_origin == 'fink_extended':
-		converted_df = pd.read_csv('ZTF_TDE_Data/all_tde_in_ztf.csv')
+		converted_df = pd.read_csv('ZTF_TDE_Data/all_tde_in_ztf.csv', dtype={'id': str})
 		converted_df['type'] = 'TDE'
 	else:
 		if overwrite_fink_df:
@@ -433,8 +434,8 @@ def generate_features_tdes(data_origin = 'forced_phot', feat_extractor = 'rainbo
 
 # 	# Obtain features and save
 	if feat_extractor == 'rainbow':
-		feature_matrix = extract_rainbow_feat(converted_df_early, show_plots = False)
-		feature_matrix.to_csv('Features_check/features_rainbow_tdes.csv', index = None)
+		feature_matrix = extract_rainbow_feat(converted_df_early, show_plots = True)
+		feature_matrix.to_csv('Features_check/features_rainbow_baseline_tdes.csv', index = None)
 
 	else:
 		feature_matrix = sn_tools.featurize_full_dataset(converted_df_early, screen = True)
