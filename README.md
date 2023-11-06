@@ -25,3 +25,9 @@ Then, let’s install the oher dependencies needed.
 pip install requests
 pip install tqdm
 ```
+
+For the Active Anomaly Detection notebook, you should install the [Coniferest](https://coniferest.readthedocs.io/en/latest/tutorial.html) package:
+
+```
+pip install coniferest
+```
