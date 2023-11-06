@@ -9,19 +9,25 @@ It includes the repositories ActsnClass and the fink_sn_activelearning modules a
 Create virtual environment, and activate it.
 Git clone the repository and enter the directory. 
 
-ActsnClass and the fink_sn_activelearning modules.
+Install [ActSNClass](https://github.com/COINtoolbox/ActSNClass)
 ```
-cd early_tde_classification/ActSNClass
-pip install -r requirements.txt
-python setup.py install
+pip install git+https://github.com/COINtoolbox/ActSNClass
+```
 
-cd ../fink_sn_AL_classifier/
-pip install -r requirements.txt
-python setup.py install
+Install [ActSNFink](https://github.com/emilleishida/fink_sn_activelearning)
+
+```
+pip install git+https://github.com/emilleishida/fink_sn_activelearning@ee53bf21594c94b4bd4e6b4cbf706d0ca2c7c1c4
 ```
 
 Then, let’s install the oher dependencies needed.
 ```
 pip install requests
 pip install tqdm
+```
+
+For the Active Anomaly Detection notebook, you should install the [Coniferest](https://coniferest.readthedocs.io/en/latest/tutorial.html) package:
+
+```
+pip install coniferest
 ```
