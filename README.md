@@ -21,10 +21,11 @@ Install [ActSNFink](https://github.com/emilleishida/fink_sn_activelearning)
 ```
 pip install git+https://github.com/emilleishida/fink_sn_activelearning@ee53bf21594c94b4bd4e6b4cbf706d0ca2c7c1c4
 ```
-In order to install the [Rainbow package](https://github.com/erusseil/light-curve-python), we need to previously install rust
+In order to install the [Rainbow package](https://github.com/erusseil/light-curve-python), we need to previously install rust.
 ```
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
+Clone and pip install the [Rainbow package](https://github.com/erusseil/light-curve-python).
 
 Then, let’s install the oher dependencies needed.
 ```
