@@ -12,7 +12,7 @@ import glob
 import logging
 import numpy as np
 import matplotlib.pyplot as plt
-from fink_sn_AL_classifier.actsnfink.early_sn_classifier import mag2fluxcal_snana
+from conversion_tools import mag2fluxcal_snana
 from light_curve.light_curve_py import RainbowFit
 from config import Config
 

@@ -6,7 +6,7 @@ from io import BytesIO
 import sys
 import os
 import matplotlib.pyplot as plt
-import tools_from_sn_classifier as sn_tools
+import conversion_tools
 from light_curve.light_curve_py import RainbowFit
 import logging
 logging.basicConfig(encoding='utf-8', level=logging.INFO)
@@ -280,7 +280,7 @@ def convert_df(fink_df, data_origin = 'fink'):
 		df = load_forced_photometry_data(fink_df)
 		converted_df = convert_forced_phot_df(df)
 	elif data_origin == 'fink':
-		converted_df = sn_tools.convert_full_dataset(fink_df, obj_id_header='objectId')
+		converted_df = conversion_tools.convert_full_dataset(fink_df, obj_id_header='objectId')
 	else:
 		print('wrong string given')
 		sys.exit()
@@ -389,7 +389,7 @@ def generate_features_tdes(data_origin = 'forced_phot', feat_extractor = 'rainbo
 		converted_df.rename(columns = {'objectId': 'id'}, inplace = True)
 	else:
 		if overwrite_fink_df:
-			fink_df,_ = get_data_from_FINK(save = True, extended = True)
+			fink_df, _ = get_data_from_FINK(save = True, extended = True)
 		else:
 			fink_df = pd.read_csv('ZTF_TDE_Data/from_Fink.csv')
 
@@ -397,24 +397,15 @@ def generate_features_tdes(data_origin = 'forced_phot', feat_extractor = 'rainbo
 
 	converted_df_early = crop_lc_to_rising_part(converted_df, save_csv = True)
 
-
-# 	# Obtain features and save
-	if feat_extractor == 'rainbow':
-		feature_matrix = extract_rainbow_feat(converted_df_early, show_plots = show_plots)
-		feature_matrix.to_csv('Features_check/features_rainbow_tdes.csv', index = None)
-
-	else:
-		feature_matrix = sn_tools.featurize_full_dataset(converted_df_early, screen = True)
-		feature_matrix.to_csv('Features_check/features_tdes.csv', index = None)
-		merge_features_tdes_SN('Features_check/features_tdes.csv', 'Features_check/features_non_tdes.csv',
-							   'Features_check/merged_features.csv')
+	# Obtain features and save
+	feature_matrix = extract_rainbow_feat(converted_df_early, show_plots = show_plots)
+	feature_matrix.to_csv('Features_check/features_rainbow_tdes.csv', index = None)
 
 
 if __name__ == '__main__':
 
 	data_origin = 'forced_phot'
 	data_origin = 'fink_extended'
-	feat_extractor = 'rainbow'
 
 	# Get features TDEs
-	generate_features_tdes(data_origin, feat_extractor, overwrite_fink_df = False, show_plots = True)
+	generate_features_tdes(data_origin, overwrite_fink_df = False, show_plots = True)
