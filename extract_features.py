@@ -398,6 +398,6 @@ if __name__ == '__main__':
 
 	start = dt.datetime.now()
 
-	extract_features('simbad', nb_files = 2)
+	extract_features('tns')
 
 	logging .info("Done in {} seconds.".format(dt.datetime.now() - start))
