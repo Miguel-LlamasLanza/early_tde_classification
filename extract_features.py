@@ -22,11 +22,11 @@ from config import Config
 logging.basicConfig(encoding='utf-8', level=logging.INFO)
 
 
-def load_zenodo_data(which_data = 'all', keep_only_one_per_object = False, min_points_fit = 5,
+def load_zenodo_data(which_data = 'all_zenodo', keep_only_one_per_object = False, min_points_fit = 5,
 					 nb_files = None):
 
 	path_parquet_files = Config.ZENODO_DATA_DIR
-	if which_data == 'all':
+	if which_data == 'all_zenodo':
 		all_parquet_fnames = glob.glob(os.path.join(path_parquet_files, '*.parquet'))
 	else:  # if TNS or SIMBAD
 		all_parquet_fnames = glob.glob(os.path.join(path_parquet_files,
@@ -320,6 +320,7 @@ def extract_features_tdes(save = True):
 		lambda x: feature_extractor_for_row_df(x, feature, flux_conv_required=False,
 										  show_plots = False), result_type = 'expand', axis = 1)
 	feature_matrix.dropna(inplace = True)
+	feature_matrix['data_origin'] = 'ztf_tdes'
 
 	# Save features into csv
 	if save:
@@ -336,7 +337,7 @@ def extract_features_nontdes_zenodo(which_data, save = True, nb_files = None):
 	Parameters
 	----------
 	which_data : str
-		Whether to load 'simbad', 'tns' or 'all' parquet files.
+		Whether to load 'simbad', 'tns' or 'all_zenodo' parquet files.
 	save : bool, optional
 		whether to save into csv file. The default is True.
 	nb_files : int, optional
@@ -364,6 +365,7 @@ def extract_features_nontdes_zenodo(which_data, save = True, nb_files = None):
 		lambda x: feature_extractor_for_row_df(x, feature, show_plots = False),
 												result_type = 'expand', axis = 1)
 	feature_matrix.dropna(inplace = True)
+	feature_matrix['data_origin'] = which_data
 
 	# Save features into csv
 	if save:
@@ -391,13 +393,13 @@ def extract_features(data_origin, **kwargs):
 		extract_features_nontdes_zenodo(data_origin, **kwargs)
 	elif data_origin == 'all':
 		extract_features_tdes(**kwargs)
-		extract_features_nontdes_zenodo(data_origin, **kwargs)
-
+		extract_features_nontdes_zenodo('simbad', **kwargs)
+		extract_features_nontdes_zenodo('tns', **kwargs)
 
 if __name__ == '__main__':
 
 	start = dt.datetime.now()
 
-	extract_features('tns')
+	extract_features('tdes_ztf')
 
 	logging .info("Done in {} seconds.".format(dt.datetime.now() - start))
