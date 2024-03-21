@@ -399,7 +399,8 @@ def generate_features_tdes(data_origin = 'forced_phot', feat_extractor = 'rainbo
 
 	# Obtain features and save
 	feature_matrix = extract_rainbow_feat(converted_df_early, show_plots = show_plots)
-	feature_matrix.to_csv('Features_check/features_rainbow_tdes.csv', index = None)
+# 	feature_matrix.to_csv('Features_check/features_rainbow_tdes.csv', index = None)
+	return feature_matrix
 
 
 if __name__ == '__main__':
@@ -408,4 +409,8 @@ if __name__ == '__main__':
 	data_origin = 'fink_extended'
 
 	# Get features TDEs
-	generate_features_tdes(data_origin, overwrite_fink_df = False, show_plots = True)
+	generate_features_tdes(data_origin, overwrite_fink_df = False, show_plots = False)
+
+
+
+

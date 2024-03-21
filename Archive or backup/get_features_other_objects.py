@@ -73,8 +73,6 @@ def crop_lc_to_rising_time(lc_values, days_to_crop_before = 200):
 	# Mask from minimum to maximum
 	lc_values = lc_values[:, tmin_idx:tmax_idx + 1]
 
-
-
 	return lc_values
 
 
@@ -171,8 +169,10 @@ def extract_features_for_an_object(row_obj, feature, filt_conv, min_nb_points_fi
 	lc_values[1], lc_values[2] = lc_values[1] / norm, lc_values[2] / norm
 
 	if lc_values.shape[1] >= min_nb_points_fit:
+		# Fit
 		values_fit, err_fit = feature(*lc_values[:-1], filt_list)
 
+		# Plot
 		if show_plots:
 			plot_lightcurve_and_fit(lc_values, filt_list, values_fit, err_fit, ztf_name = name)
 
@@ -199,15 +199,15 @@ feature_matrix = pd.DataFrame([], columns = columns)
 # Load objects
 all_obj_df = load_data_other_objects(data_origin)
 
-# Get features
-feature_matrix[columns] = all_obj_df.apply(
-	lambda x: extract_features_for_an_object(x, feature, filt_conv, show_plots = False),
-											result_type = 'expand', axis = 1)
-feature_matrix.dropna(inplace = True)
+# # Get features
+# feature_matrix[columns] = all_obj_df.apply(
+# 	lambda x: extract_features_for_an_object(x, feature, filt_conv, show_plots = False),
+# 											result_type = 'expand', axis = 1)
+# feature_matrix.dropna(inplace = True)
 
-# Save features
-feature_matrix.to_csv(csv_file, index = False)
+# # Save features
+# feature_matrix.to_csv(csv_file, index = False)
 
 
-end = dt.datetime.now()
-logging .info("Done in {} seconds.".format(end - start))
+# end = dt.datetime.now()
+# logging .info("Done in {} seconds.".format(end - start))

@@ -13,27 +13,27 @@ import pandas as pd
 
 
 def mag2fluxcal_snana(magpsf: float, sigmapsf: float):
-    """ Conversion from magnitude to Fluxcal from SNANA manual. Taken from SN classifier.
-    Parameters
-    ----------
-    magpsf: float
-        PSF-fit magnitude from ZTF.
-    sigmapsf: float
-        Error on PSF-fit magnitude from ZTF.
+	""" Conversion from magnitude to Fluxcal from SNANA manual. Taken from SN classifier.
+	Parameters
+	----------
+	magpsf: float
+		PSF-fit magnitude from ZTF.
+	sigmapsf: float
+		Error on PSF-fit magnitude from ZTF.
 
-    Returns
-    ----------
-    fluxcal: float
-        Flux cal as used by SNANA
-    fluxcal_err: float
-        Absolute error on fluxcal (the derivative has a minus sign)
-    """
-    if magpsf is None:
-        return None, None
-    fluxcal = 10 ** (-0.4 * magpsf) * 10 ** (11)
-    fluxcal_err = 9.21034 * 10 ** 10 * np.exp(-0.921034 * magpsf) * sigmapsf
+	Returns
+	----------
+	fluxcal: float
+		Flux cal as used by SNANA
+	fluxcal_err: float
+		Absolute error on fluxcal (the derivative has a minus sign)
+	"""
+	if magpsf is None:
+		return None, None
+	fluxcal = 10 ** (-0.4 * magpsf) * 10 ** (11)
+	fluxcal_err = 9.21034 * 10 ** 10 * np.exp(-0.921034 * magpsf) * sigmapsf
 
-    return fluxcal, fluxcal_err
+	return fluxcal, fluxcal_err
 
 
 def convert_full_dataset(pdf: pd.DataFrame, obj_id_header='candid'):
@@ -109,3 +109,54 @@ def convert_full_dataset(pdf: pd.DataFrame, obj_id_header='candid'):
 													 'FLUXCALERR'])
 
 	return lc_flux_sig
+
+
+
+def add_alert_history_to_df(df, prefix = 'c'):
+	"""
+	Add the history of alerts as a list in each cell of FLUXCAL, FLUXCALERR, MJD and FLT columns.
+	This way, we convert from the df obtained from Fink to the one from the zenodo parquet files.
+
+	Parameters
+	----------
+	df : pd.DataFrame
+		DataFrame with one value (of flux, error, time, filter) per row.
+
+	Returns
+	-------
+	df_sorted : pd.DataFrame
+		DataFrame with list of (flux, error, time, filter) values in each row, i.e. alert history.
+
+	"""
+
+
+	# Sort DataFrame by objectId and MJD
+	df_sorted = df.sort_values(by=['objectId', 'MJD'])
+
+	# Define columns for which history will be tracked
+	history_columns = ['FLUXCAL', 'FLUXCALERR', 'FLT', 'MJD']
+
+	# Create empty dictionaries to store history for each column
+	history_dict = {col: [] for col in history_columns}
+
+	# Iterate over each group
+	for _, group in df_sorted.groupby('objectId'):
+		# Initialize lists of history for each column for this group
+		group_history = {col: [] for col in history_columns}
+		# Iterate over each row in the group
+		for index, row in group.iterrows():
+			# Get history for each column for this row
+			row_history = {col: group.loc[group.index <= index, col].tolist() for col in history_columns}
+			# Add to the history for each column for this row
+			for col in history_columns:
+				group_history[col].append(row_history[col])
+		# Extend the history for each column for this group
+		for col in history_columns:
+			history_dict[col].extend(group_history[col])
+
+	# Add the history for each column as new columns to the DataFrame
+	for col in history_columns:
+		df_sorted[prefix+col] = history_dict[col]
+
+
+	return df_sorted
