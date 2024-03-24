@@ -215,21 +215,22 @@ def plot_lightcurve_and_fit(lc_values, filt_list, values_fit, err_fit, feature, 
 		ferr = fluxerr[mask]
 		t = mjd[mask]
 
-		rainbow = feature.model(X, i, values_fit)
+		rainbow = feature.model(X, i, *values_fit)
+
 		plt.errorbar(t, f, yerr=ferr, fmt='o', alpha=.7, color=colors[idx])
 		plt.plot(X, rainbow, linewidth=5, label=i, color=colors[idx])
-		# Error plots
-		generated_params = np.random.multivariate_normal(values_fit[:-1], np.diag(err_fit)**2, 1000)
-		generated_lightcurves = np.array([feature.model(X, i, generated_values)
-									for generated_values in generated_params])
-		generated_envelope = np.nanpercentile(generated_lightcurves, [16, 84], axis=0)
-		plt.fill_between(X, generated_envelope[0], generated_envelope[1], alpha=0.2, color=colors[idx])
+# 		# Error plots
+# 		generated_params = np.random.multivariate_normal(values_fit[:-1], np.diag(err_fit)**2, 1000)
+# 		generated_lightcurves = np.array([feature.model(X, i, generated_values)
+# 									for generated_values in generated_params])
+# 		generated_envelope = np.nanpercentile(generated_lightcurves, [16, 84], axis=0)
+# 		plt.fill_between(X, generated_envelope[0], generated_envelope[1], alpha=0.2, color=colors[idx])
 
 		plt.title(title)
 
 
 def feature_extractor_for_row_df(row_obj, feature, flux_conv_required = True,
-								 min_nb_points_fit = 5, show_plots = False):
+								 min_nb_points_fit = 7, show_plots = False):
 	"""
 	Extract features with rainbow for one row of the DataFrame (row_obj).
 
@@ -279,15 +280,26 @@ def feature_extractor_for_row_df(row_obj, feature, flux_conv_required = True,
 		filt_list = np.vectorize(Config.filt_conv.get)(lc_values[3].astype(int))
 
 		# Fit
-		values_fit, err_fit = feature(*lc_values[:-1], filt_list)
+# 		values_fit, err_fit = feature(*lc_values[:-1], filt_list)
+		try:
+			values_fit = feature(*lc_values[:-1], filt_list)
+		except RuntimeError:
+			values_fit = list(np.full((5), np.nan))
 
-		# Plot
+
+# 		# Plot
 		if show_plots:
- 			plot_lightcurve_and_fit(lc_values, filt_list, values_fit, err_fit, feature,
+# 			plot_lightcurve_and_fit(lc_values, filt_list, values_fit, err_fit, feature,
+# 							title = 'objectId: %s. Transient type: %s. '%(name, trans_type))
+			plot_lightcurve_and_fit(lc_values, filt_list, values_fit, None, feature,
 							title = 'objectId: %s. Transient type: %s. '%(name, trans_type))
 
-		return [name, alertid, trans_type] + list(values_fit) + list(err_fit)
-	return [name, alertid, trans_type] + list(np.full((9), np.nan))
+# 		return [name, alertid, trans_type] + list(values_fit) + list(err_fit)
+		return [name, alertid, trans_type] + list(values_fit)
+
+# 	return [name, alertid, trans_type] + list(np.full((9), np.nan))
+	return [name, alertid, trans_type] + list(np.full((5), np.nan))
+
 
 
 def extract_features_tdes(save = True):
@@ -306,10 +318,14 @@ def extract_features_tdes(save = True):
 
 	"""
 	# Initialise
-	feature = RainbowFit.from_angstrom(Config.band_wave_aa, with_baseline = False)
+	feature = RainbowFit.from_angstrom(Config.band_wave_aa, with_baseline = False,
+									temperature='constant', bolometric='sigmoid')
+# 	columns_feat = ['objId', 'alertId', 'type', 'ref_time', 'amplitude', 'rise_time', 'temperature',
+# 					'r_chisq',
+# 					'err_ref_time', 'err_amplitude', 'err_rise_time', 'err_temperature']
+#
 	columns_feat = ['objId', 'alertId', 'type', 'ref_time', 'amplitude', 'rise_time', 'temperature',
-					'r_chisq',
-					'err_ref_time', 'err_amplitude', 'err_rise_time', 'err_temperature']
+					'r_chisq']
 	feature_matrix = pd.DataFrame([], columns = columns_feat)
 
 	# Load
@@ -318,13 +334,13 @@ def extract_features_tdes(save = True):
 	# Get features
 	feature_matrix[columns_feat] = ztf_tde_data.apply(
 		lambda x: feature_extractor_for_row_df(x, feature, flux_conv_required=False,
-										  show_plots = False), result_type = 'expand', axis = 1)
+										  show_plots = True), result_type = 'expand', axis = 1)
 	feature_matrix.dropna(inplace = True)
 	feature_matrix['data_origin'] = 'ztf_tdes'
 
 	# Save features into csv
 	if save:
-		feature_matrix.to_csv(os.path.join(Config.OUT_FEATURES_DIR, 'features_tdes_ztf.csv'),
+		feature_matrix.to_csv(os.path.join(Config.OUT_FEATURES_DIR, 'features_tdes_ztf_noerrors.csv'),
 							  index = False)
 	return feature_matrix
 

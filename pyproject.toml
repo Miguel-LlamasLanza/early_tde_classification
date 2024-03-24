@@ -1,0 +1,8 @@
+[project]
+name = "early_tde_classification"
+version = "0.1.0"
+description = "Early TDE classification project"
+
+[build-system]
+build-backend = "flit_core.buildapi"
+requires = ["flit_core >=3.2,<4"]

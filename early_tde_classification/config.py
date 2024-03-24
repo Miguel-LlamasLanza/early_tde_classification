@@ -20,6 +20,7 @@ class Config:
 	ZENODO_DATA_DIR = os.path.join(DATA_DIR, 'AL_data/')
 	OUT_FEATURES_DIR = os.path.join(DATA_DIR, 'features')
 	ZTF_TDE_DATA_DIR = 'ZTF_TDE_Data'
+	ANOMALY_DET_DATA_DIR = os.path.join(DATA_DIR, 'AD_scores')
 
 	# Filters ZTF
 
