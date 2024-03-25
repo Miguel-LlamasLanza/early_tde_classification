@@ -2,6 +2,13 @@
 name = "early_tde_classification"
 version = "0.1.0"
 description = "Early TDE classification project"
+dependencies = [
+	"pandas",
+	"numpy"
+	"matplotlib",
+	"coniferest",
+]
+
 
 [build-system]
 build-backend = "flit_core.buildapi"

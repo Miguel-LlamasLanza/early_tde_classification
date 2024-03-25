@@ -11,29 +11,17 @@ conda create --name tdes python=3.10
 conda activate tdes
 ```
 
-Install [ActSNClass](https://github.com/COINtoolbox/ActSNClass)
-```
-pip install git+https://github.com/COINtoolbox/ActSNClass
-```
-
-Install [ActSNFink](https://github.com/emilleishida/fink_sn_activelearning)
-
-```
-pip install git+https://github.com/emilleishida/fink_sn_activelearning@ee53bf21594c94b4bd4e6b4cbf706d0ca2c7c1c4
-```
-In order to install the [Rainbow package](https://github.com/erusseil/light-curve-python), we need to previously install rust.
+In order to use the Rainbow fitting, we need to install the [light-curve-python package](https://github.com/light-curve/light-curve-python), for which we previously  need to install rust, with the following command:
 ```
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
-Clone and pip install the [Rainbow package](https://github.com/erusseil/light-curve-python).
-
-Then, let’s install the oher dependencies needed.
+Then, we can clone and pip install the [light-curve-python package](https://github.com/light-curve/light-curve-python):
 ```
-pip install requests matplotlib pandas
+python3 -mpip install 'light-curve[full]'
 ```
 
-For the Active Anomaly Detection notebook, you should install the [Coniferest](https://coniferest.readthedocs.io/en/latest/tutorial.html) package:
+Then, simply install this project with
+```
+pip install -e .
+```
 
-```
-pip install coniferest
-```

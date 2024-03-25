@@ -19,7 +19,7 @@ class Config:
 	DATA_DIR = '/home/lmiguel/Data/TDE_classification/'
 	ZENODO_DATA_DIR = os.path.join(DATA_DIR, 'AL_data/')
 	OUT_FEATURES_DIR = os.path.join(DATA_DIR, 'features')
-	ZTF_TDE_DATA_DIR = 'ZTF_TDE_Data'
+	ZTF_TDE_DATA_DIR = '../ZTF_TDE_Data'
 	ANOMALY_DET_DATA_DIR = os.path.join(DATA_DIR, 'AD_scores')
 
 	# Filters ZTF

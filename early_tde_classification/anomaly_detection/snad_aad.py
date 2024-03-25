@@ -119,7 +119,7 @@ Let’s run Isolation Forest model (see [Liu *et al.* 2008](https://doi.org/10.1
 """
 
 # declare and fit an isolation forest
-model_iso = IsolationForest(random_seed=0)
+model_iso = IsolationForest(random_seed=42)
 model_iso.fit(feat_data_to_fit)
 
 # evaluate classification
@@ -157,12 +157,11 @@ model_ex1 = PineForest(
 		# Use 1024 trees, a trade-off between speed and accuracy
 		n_trees=1024,
 		# Fix random seed for reproducibility
-		random_seed=None,
+		random_seed=42,
 )
 
-index = labels == 'TDE'
-labels_integer = (labels == 'TDE').astype(int)
-
+# labels_integer = (labels == 'TDE').astype(int)
+labels_integer = labels == 'TDE'
 
 session_ex1 = Session(
 		data=feat_data_to_fit,

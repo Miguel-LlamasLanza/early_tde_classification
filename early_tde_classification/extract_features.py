@@ -120,7 +120,7 @@ def get_rising_flags_per_filter(mjd, flux, fluxerr, flt,
 		Pandas DataFrame with at least ['MJD', 'FLT', 'FLUXCAL', 'FLUXCALERR']
 		as columns.
 	min_data_points: int (optional)
-		Minimum number of data points in all filters. Default is 7.
+		Minimum number of data points in all filters. Default is 5.
 	list_filters: list (optional)
 		List of filters to consider. Default is ['g', 'r'].
 	low_bound: float (optional)
@@ -302,7 +302,7 @@ def feature_extractor_for_row_df(row_obj, feature, flux_conv_required = True,
 
 
 
-def extract_features_tdes(save = True):
+def extract_features_tdes(save = True, show_plots = False):
 	"""
 	Extract features (with rainbow) for TDEs from ZTF, from lightcurves (one lightcurve per alert)
 
@@ -334,18 +334,18 @@ def extract_features_tdes(save = True):
 	# Get features
 	feature_matrix[columns_feat] = ztf_tde_data.apply(
 		lambda x: feature_extractor_for_row_df(x, feature, flux_conv_required=False,
-										  show_plots = True), result_type = 'expand', axis = 1)
+										  show_plots = show_plots), result_type = 'expand', axis = 1)
 	feature_matrix.dropna(inplace = True)
 	feature_matrix['data_origin'] = 'ztf_tdes'
 
 	# Save features into csv
 	if save:
-		feature_matrix.to_csv(os.path.join(Config.OUT_FEATURES_DIR, 'features_tdes_ztf_noerrors.csv'),
+		feature_matrix.to_csv(os.path.join(Config.OUT_FEATURES_DIR, 'features_tdes_ztf.csv'),
 							  index = False)
 	return feature_matrix
 
 
-def extract_features_nontdes_zenodo(which_data, save = True, nb_files = None):
+def extract_features_nontdes_zenodo(which_data, save = True, nb_files = None, show_plots = False):
 	"""
 	Extract features (with rainbow) for non-TDE objects from Zenodo dataset (one LC per alert)
 
@@ -367,7 +367,8 @@ def extract_features_nontdes_zenodo(which_data, save = True, nb_files = None):
 	"""
 
 	# Initialise
-	feature = RainbowFit.from_angstrom(Config.band_wave_aa, with_baseline = False)
+	feature = RainbowFit.from_angstrom(Config.band_wave_aa, with_baseline = False,
+									temperature='constant', bolometric='sigmoid')
 	columns_feat = ['objId', 'alertId', 'type', 'ref_time', 'amplitude', 'rise_time', 'temperature',
 					'r_chisq',
 					'err_ref_time', 'err_amplitude', 'err_rise_time', 'err_temperature']
@@ -378,7 +379,7 @@ def extract_features_nontdes_zenodo(which_data, save = True, nb_files = None):
 
 	# Get features
 	feature_matrix[columns_feat] = zenodo_data.apply(
-		lambda x: feature_extractor_for_row_df(x, feature, show_plots = False),
+		lambda x: feature_extractor_for_row_df(x, feature, show_plots = show_plots),
 												result_type = 'expand', axis = 1)
 	feature_matrix.dropna(inplace = True)
 	feature_matrix['data_origin'] = which_data
@@ -390,7 +391,7 @@ def extract_features_nontdes_zenodo(which_data, save = True, nb_files = None):
 	return feature_matrix
 
 
-def extract_features(data_origin, **kwargs):
+def extract_features(data_origin, max_nb_files_simbad = None, **kwargs):
 	"""
 	Main function to extract the features.
 
@@ -406,16 +407,16 @@ def extract_features(data_origin, **kwargs):
 	if data_origin == 'tdes_ztf':
 		extract_features_tdes(**kwargs)
 	elif data_origin in ['simbad', 'tns']:
-		extract_features_nontdes_zenodo(data_origin, **kwargs)
+		extract_features_nontdes_zenodo(data_origin, nb_files = max_nb_files_simbad, **kwargs)
 	elif data_origin == 'all':
 		extract_features_tdes(**kwargs)
-		extract_features_nontdes_zenodo('simbad', **kwargs)
+		extract_features_nontdes_zenodo('simbad', nb_files = max_nb_files_simbad,  **kwargs)
 		extract_features_nontdes_zenodo('tns', **kwargs)
 
 if __name__ == '__main__':
 
 	start = dt.datetime.now()
 
-	extract_features('tdes_ztf')
+	extract_features('all', max_nb_files_simbad = 2)
 
 	logging .info("Done in {} seconds.".format(dt.datetime.now() - start))
