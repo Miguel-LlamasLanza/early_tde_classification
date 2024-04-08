@@ -116,7 +116,7 @@ def is_sorted(a):
 
 
 def get_rising_flags_per_filter(mjd, flux, fluxerr, flt,
-						min_data_points=5, list_filters=['g', 'r'], low_bound=-10):
+						min_data_points=5, list_filters=['g', 'r'], low_bound=-10, sigma_rise = 1):
 	"""Filter only rising alerts for Rainbow fit.
 
 	Parameters
@@ -130,6 +130,8 @@ def get_rising_flags_per_filter(mjd, flux, fluxerr, flt,
 		List of filters to consider. Default is ['g', 'r'].
 	low_bound: float (optional)
 		Lower bound of FLUXCAL to consider. Default is -10.
+	sigma_rise: float (optional)
+		Sigma value to consider for the rising cut.
 
 	Returns
 	-------
@@ -166,13 +168,13 @@ def get_rising_flags_per_filter(mjd, flux, fluxerr, flt,
 					# check if it is rising (lower bound of last alert is larger than the smallest upper bound)
 					# and not yet decreasing (upper bound of last alert is larger than the largest lower bound)
 					avg_data = average_intraday_data(lc)
-
+					sigma_factor = sigma_rise / np.sqrt(2)
 					if len(avg_data) > 1:
 						rising_flag = (
 							((avg_data['FLUXCAL'].values[-1] + avg_data['FLUXCALERR'].values[-1])
 							> np.nanmax(avg_data['FLUXCAL'].values - avg_data['FLUXCALERR'].values))
-							& (avg_data['FLUXCAL'].values[-1] - avg_data['FLUXCALERR'].values[-1]
-							>np.nanmin(avg_data['FLUXCAL'].values + avg_data['FLUXCALERR'].values)))
+							& (avg_data['FLUXCAL'].values[-1] - sigma_factor * avg_data['FLUXCALERR'].values[-1]
+							>np.nanmin(avg_data['FLUXCAL'].values + sigma_factor * avg_data['FLUXCALERR'].values)))
 
 					filter_flags[i] = rising_flag
 				else:
@@ -486,6 +488,8 @@ def extract_features(data_origin, max_nb_files_simbad = None, **kwargs):
 			all_features.to_csv(os.path.join(
 				Config.OUT_FEATURES_DIR, 'features_all.csv'), index = False)
 		return all_features
+	else:
+		print('Wrong string given as data origin. Must be "simbad", "tns", "tdes_ztf" or "all"')
 
 
 if __name__ == '__main__':
