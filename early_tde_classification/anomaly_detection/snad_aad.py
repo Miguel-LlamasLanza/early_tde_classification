@@ -8,6 +8,7 @@ Full documentation of Corniferest can be found [ReadTheDocs](https://coniferest.
 """
 
 import matplotlib.pyplot as plt
+import time
 
 import numpy as np
 import pandas as pd
@@ -100,6 +101,8 @@ def get_percentages_above_treshold(scores, score_thresh):
 	return df
 
 
+start = time.time()
+
 # Load
 df, labels = load_features(os.path.join(Config.OUT_FEATURES_DIR, 'features_all.csv'))
 labels[labels == 'tdes_ztf'] = 'TDE'
@@ -163,12 +166,13 @@ model_ex1 = PineForest(
 # labels_integer = (labels == 'TDE').astype(int)
 labels_integer = labels == 'TDE'
 
+
 session_ex1 = Session(
 		data=feat_data_to_fit,
 		metadata=labels_integer,
 		model=model_ex1,
 		decision_callback=lambda metadata, data, session: metadata,
-		on_decision_callbacks=TerminateAfter(3000),
+		on_decision_callbacks=TerminateAfter(50000),
 )
 
 session_ex1.run()
@@ -176,7 +180,8 @@ session_ex1.run()
 scores_pine = session_ex1.model.score_samples(feat_data_to_fit)
 # Save
 df_scores_pine = pd.DataFrame(np.column_stack([scores_pine, labels]), columns = ['scores', 'labels'])
-df_scores_pine.to_csv('scores_pine.csv', index = False)
+#df_scores_pine.to_csv('scores_pine.csv', index = False)
+df_scores_pine.to_csv(os.path.join(Config.ANOMALY_DET_DATA_DIR, 'scores_pine.csv'), index = False)
 
 # Analysis
 plot_hists(scores_pine, mask_tdes, mask_tns, mask_simbad)
@@ -184,3 +189,5 @@ plot_hists(scores_pine, mask_tdes, mask_tns, mask_simbad)
 df_pine = get_percentages_above_treshold(scores_pine, -0.5)
 df_both = pd.concat([df_iso, df_pine])
 
+print("Done in {} seconds.".format(time.time() - start))
+plt.show()
