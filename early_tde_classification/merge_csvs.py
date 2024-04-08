@@ -15,8 +15,14 @@ import sys
 from config import Config
 
 
-all_csvs = glob.glob(os.path.join(Config.OUT_FEATURES_DIR, '*.csv'))
-out_csv_fname = os.path.join(Config.OUT_FEATURES_DIR, 'features_all.csv')
+# Choose subfolder (one alert or all alerts)
+outdir = os.path.join(Config.OUT_FEATURES_DIR, 'one_alert_per_object')
+# outdir = os.path.join(Config.OUT_FEATURES_DIR, 'all_alerts_per_object')
+
+
+# Define paths
+all_csvs = glob.glob(os.path.join(outdir, '*.csv'))
+out_csv_fname = os.path.join(outdir, 'features_all.csv')
 
 if out_csv_fname in all_csvs:
 	print('Results will overwrite the file (%s)'% out_csv_fname)
@@ -37,5 +43,6 @@ for csv_fname in all_csvs:
 
 # Concat
 merged_df = pd.concat(all_features)
+
 # Save
 merged_df.to_csv(out_csv_fname, index = False)

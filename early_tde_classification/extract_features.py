@@ -22,8 +22,8 @@ from config import Config
 logging.basicConfig(encoding='utf-8', level=logging.INFO)
 
 
-def load_zenodo_data(which_data = 'all_zenodo', keep_only_one_per_object = False, min_points_fit = 5,
-					 nb_files = None):
+def load_zenodo_data(which_data = 'all_zenodo', keep_only_one_per_object = False,
+					 min_points_fit = 5, nb_files = None):
 
 	path_parquet_files = Config.ZENODO_DATA_DIR
 	if which_data == 'all_zenodo':
@@ -41,7 +41,7 @@ def load_zenodo_data(which_data = 'all_zenodo', keep_only_one_per_object = False
 	all_obj_df['length'] = all_obj_df['cjd'].apply(lambda x: len(x))
 
 	if keep_only_one_per_object:
-		# Keep only row with all alerts
+		# Keep only row with all alerts  (not used anymore here, but left to see if it is worth using after extracting feat)
 		all_obj_df.sort_values(['objectId', 'length'], inplace = True)
 		names = np.array(all_obj_df['objectId'])
 		mask = np.append((names[:-1] != names[1:]), True)
@@ -49,6 +49,9 @@ def load_zenodo_data(which_data = 'all_zenodo', keep_only_one_per_object = False
 
 	# Drop all rows with less points than needed for the fit
 	all_obj_df = all_obj_df[all_obj_df.length >= min_points_fit]
+
+	# Drop duplicates
+	all_obj_df.drop_duplicates(subset = 'candid', inplace = True)
 
 	# Rename column
 	all_obj_df.rename(columns = {'TNS': 'type',
@@ -65,6 +68,8 @@ def load_tdes_ztf(min_points_fit = 5):
 	df['type'] = 'TDE'
 	df.drop(columns = 'id', inplace=True)
 
+	# Remove outliers
+	df = df[~df.objectId.isin(['ZTF18acpdvos', 'ZTF18aabtxvd', 'ZTF18aahqkbt'])]
 	# Convert filter name (str) to filter ID (int)
 	inverse_filt_conv = {v: k for k, v in Config.filt_conv.items()}
 	df['FLT'] = np.vectorize(inverse_filt_conv.get)(df.FLT.astype(str))
@@ -77,7 +82,7 @@ def load_tdes_ztf(min_points_fit = 5):
 	# Drop all rows with less points than needed for the fit
 	df = df[df['length'] >= min_points_fit]
 	# Create a dummy candid based on the length
-	df['candid'] = df['length']
+	df['candid'] = df['objectId'] + '-' + df['length'].astype(str)
 
 	return df
 
@@ -163,10 +168,11 @@ def get_rising_flags_per_filter(mjd, flux, fluxerr, flt,
 					avg_data = average_intraday_data(lc)
 
 					if len(avg_data) > 1:
-						rising_flag = ((avg_data['FLUXCAL'].values[-1]+avg_data['FLUXCALERR'].values[-1])\
-										> np.nanmax(avg_data['FLUXCAL'].values-avg_data['FLUXCALERR'].values))\
-										& (avg_data['FLUXCAL'].values[-1]-avg_data['FLUXCALERR'].values[-1]\
-										 >np.nanmin(avg_data['FLUXCAL'].values+avg_data['FLUXCALERR'].values))
+						rising_flag = (
+							((avg_data['FLUXCAL'].values[-1] + avg_data['FLUXCALERR'].values[-1])
+							> np.nanmax(avg_data['FLUXCAL'].values - avg_data['FLUXCALERR'].values))
+							& (avg_data['FLUXCAL'].values[-1] - avg_data['FLUXCALERR'].values[-1]
+							>np.nanmin(avg_data['FLUXCAL'].values + avg_data['FLUXCALERR'].values)))
 
 					filter_flags[i] = rising_flag
 				else:
@@ -208,25 +214,57 @@ def plot_lightcurve_and_fit(lc_values, filt_list, values_fit, err_fit, feature, 
 	# ax = plt.gca()
 
 	colors = ['green', 'red', 'black']
-	for idx, i in enumerate(['g', 'r', 'i']):
+	for idx, flt_str in enumerate(['g', 'r', 'i']):
 
-		mask = filt_list == i
-		f = flux[mask]
-		ferr = fluxerr[mask]
-		t = mjd[mask]
+		flt_mask = filt_list == flt_str
 
-		rainbow = feature.model(X, i, *values_fit)
+		rainbow = feature.model(X, flt_str, *values_fit)
 
-		plt.errorbar(t, f, yerr=ferr, fmt='o', alpha=.7, color=colors[idx])
-		plt.plot(X, rainbow, linewidth=5, label=i, color=colors[idx])
+		plt.errorbar(mjd[flt_mask], flux[flt_mask], yerr=fluxerr[flt_mask], fmt='o', alpha=.7,
+			   color=colors[idx])
+		plt.plot(X, rainbow, linewidth=5, label=flt_str, color=colors[idx])
 # 		# Error plots
-# 		generated_params = np.random.multivariate_normal(values_fit[:-1], np.diag(err_fit)**2, 1000)
-# 		generated_lightcurves = np.array([feature.model(X, i, generated_values)
-# 									for generated_values in generated_params])
-# 		generated_envelope = np.nanpercentile(generated_lightcurves, [16, 84], axis=0)
-# 		plt.fill_between(X, generated_envelope[0], generated_envelope[1], alpha=0.2, color=colors[idx])
+		if not np.isnan(err_fit).all():
+			generated_params = np.random.multivariate_normal(values_fit[:-1], np.diag(err_fit)**2, 1000)
+			generated_lightcurves = np.array([feature.model(X, flt_str, *generated_values)
+										for generated_values in generated_params])
+			generated_envelope = np.nanpercentile(generated_lightcurves, [16, 84], axis=0)
+			plt.fill_between(X, generated_envelope[0], generated_envelope[1], alpha=0.2, color=colors[idx])
 
 		plt.title(title)
+
+
+def get_std_and_snr(lc_values, filt_list, filters = ['g', 'r']):
+	"""
+	Compute std of flux, and of then SNR for the lightcurve, in each filter
+
+	Parameters
+	----------
+	lc_values : 2d array
+		Values from the lc (mjd, flux, fluxerr, filter).
+	filt_list : list
+		list of filters like ['g', 'r', 'i'].
+	filters : list of str, optional
+		List of filters for which the values are computed. The default is ['g', 'r'] (without 'i').
+
+	Returns
+	-------
+	list
+		Std and SNR_mean values in each of the filters. e.g. [std_g, std_r, snr_std_g, snr_std_r]
+
+	"""
+
+	# Add general statistics of lc as features
+	std_dev = {}
+	snr = {}
+	for flt_str in filters:
+		flt_mask = filt_list == flt_str
+		if len(lc_values[1][flt_mask]) > 0:
+			std_dev[flt_str] = np.std(lc_values[1][flt_mask])
+			snr[flt_str] = np.std(lc_values[1][flt_mask] / lc_values[2][flt_mask])
+		else:
+			std_dev[flt_str] = snr[flt_str] = -999
+	return list(std_dev.values()) + list(snr.values())
 
 
 def feature_extractor_for_row_df(row_obj, feature, flux_conv_required = True,
@@ -280,29 +318,35 @@ def feature_extractor_for_row_df(row_obj, feature, flux_conv_required = True,
 		filt_list = np.vectorize(Config.filt_conv.get)(lc_values[3].astype(int))
 
 		# Fit
-# 		values_fit, err_fit = feature(*lc_values[:-1], filt_list)
 		try:
-			values_fit = feature(*lc_values[:-1], filt_list)
+			values_fit, err_fit = feature._eval_and_get_errors(t=lc_values[0], m=lc_values[1],
+													  sigma = lc_values[2], band = filt_list)
 		except RuntimeError:
 			values_fit = list(np.full((5), np.nan))
+			err_fit = list(np.full((4), np.nan))
 
+		# Add general statistics of lc as features: std_g, std_r, snr_g, snr_r
+		std_and_snr = get_std_and_snr(lc_values, filt_list)
 
-# 		# Plot
+		# Plot
 		if show_plots:
-# 			plot_lightcurve_and_fit(lc_values, filt_list, values_fit, err_fit, feature,
-# 							title = 'objectId: %s. Transient type: %s. '%(name, trans_type))
-			plot_lightcurve_and_fit(lc_values, filt_list, values_fit, None, feature,
-							title = 'objectId: %s. Transient type: %s. '%(name, trans_type))
+			plot_lightcurve_and_fit(lc_values, filt_list, values_fit, err_fit, feature,
+							title = 'objectId: %s. Transient type: %s. ' %(name, trans_type))
 
-# 		return [name, alertid, trans_type] + list(values_fit) + list(err_fit)
-		return [name, alertid, trans_type] + list(values_fit)
-
-# 	return [name, alertid, trans_type] + list(np.full((9), np.nan))
-	return [name, alertid, trans_type] + list(np.full((5), np.nan))
+		return [name, alertid, trans_type,
+				   len(lc_values[1]), norm] + list(values_fit) + list(err_fit) + std_and_snr
+	return [name, alertid, trans_type, len(lc_values[1])] + list(np.full((14), np.nan))
 
 
+def keep_only_feat_last_alert_per_object(feature_matrix, input_data):
 
-def extract_features_tdes(save = True, show_plots = False):
+	merged = feature_matrix[['alertId', 'objId']].merge(input_data[['length', 'candid']], how = 'left',
+							   left_on = 'alertId', right_on='candid')
+	feature_matrix = feature_matrix.iloc[merged.groupby('objId')['length'].idxmax()]
+	return feature_matrix
+
+
+def extract_features_tdes(save = True, show_plots = False, keep_only_last_alert = False):
 	"""
 	Extract features (with rainbow) for TDEs from ZTF, from lightcurves (one lightcurve per alert)
 
@@ -310,6 +354,8 @@ def extract_features_tdes(save = True, show_plots = False):
 	----------
 	save : bool, optional
 		Whether to save the features into a csv. The default is True.
+	keep_only_last_alert : bool, optional
+		Keep only last alert that passed the cuts per object. The default is False.
 
 	Returns
 	-------
@@ -320,12 +366,11 @@ def extract_features_tdes(save = True, show_plots = False):
 	# Initialise
 	feature = RainbowFit.from_angstrom(Config.band_wave_aa, with_baseline = False,
 									temperature='constant', bolometric='sigmoid')
-# 	columns_feat = ['objId', 'alertId', 'type', 'ref_time', 'amplitude', 'rise_time', 'temperature',
-# 					'r_chisq',
-# 					'err_ref_time', 'err_amplitude', 'err_rise_time', 'err_temperature']
-#
-	columns_feat = ['objId', 'alertId', 'type', 'ref_time', 'amplitude', 'rise_time', 'temperature',
-					'r_chisq']
+	columns_feat = ['objId', 'alertId', 'type', 'nb_points', 'norm',
+				  'ref_time', 'amplitude', 'rise_time', 'temperature', 'r_chisq',
+					'err_ref_time', 'err_amplitude', 'err_rise_time', 'err_temperature',
+					'std_g', 'std_r', 'snr_g', 'snr_r']
+
 	feature_matrix = pd.DataFrame([], columns = columns_feat)
 
 	# Load
@@ -338,14 +383,24 @@ def extract_features_tdes(save = True, show_plots = False):
 	feature_matrix.dropna(inplace = True)
 	feature_matrix['data_origin'] = 'ztf_tdes'
 
+	# Keep only last alert that passed the cut per object
+	if keep_only_last_alert:
+		feature_matrix = keep_only_feat_last_alert_per_object(feature_matrix, ztf_tde_data)
+		outdir = os.path.join(Config.OUT_FEATURES_DIR, 'one_alert_per_object')
+	else:
+		outdir = os.path.join(Config.OUT_FEATURES_DIR, 'all_alerts_per_object')
+
 	# Save features into csv
 	if save:
-		feature_matrix.to_csv(os.path.join(Config.OUT_FEATURES_DIR, 'features_tdes_ztf.csv'),
+# 		feature_matrix.to_csv(os.path.join(Config.OUT_FEATURES_DIR, 'features_tdes_ztf.csv'),
+# 							  index = False)
+		feature_matrix.to_csv(os.path.join(outdir, 'features_tdes_ztf.csv'),
 							  index = False)
 	return feature_matrix
 
 
-def extract_features_nontdes_zenodo(which_data, save = True, nb_files = None, show_plots = False):
+def extract_features_nontdes_zenodo(which_data, save = True, nb_files = None, show_plots = False,
+									keep_only_last_alert = False):
 	"""
 	Extract features (with rainbow) for non-TDE objects from Zenodo dataset (one LC per alert)
 
@@ -358,6 +413,8 @@ def extract_features_nontdes_zenodo(which_data, save = True, nb_files = None, sh
 		whether to save into csv file. The default is True.
 	nb_files : int, optional
 		Maximum number of parquet files to load. If None (by default), all files are taken.
+	keep_only_last_alert : bool, optional
+		Keep only last alert that passed the cuts per object. The default is False.
 
 	Returns
 	-------
@@ -369,9 +426,10 @@ def extract_features_nontdes_zenodo(which_data, save = True, nb_files = None, sh
 	# Initialise
 	feature = RainbowFit.from_angstrom(Config.band_wave_aa, with_baseline = False,
 									temperature='constant', bolometric='sigmoid')
-	columns_feat = ['objId', 'alertId', 'type', 'ref_time', 'amplitude', 'rise_time', 'temperature',
-					'r_chisq',
-					'err_ref_time', 'err_amplitude', 'err_rise_time', 'err_temperature']
+	columns_feat = ['objId', 'alertId', 'type', 'nb_points', 'norm',
+				  'ref_time', 'amplitude', 'rise_time', 'temperature', 'r_chisq',
+					'err_ref_time', 'err_amplitude', 'err_rise_time', 'err_temperature',
+					'std_flux_g', 'std_flux_r', 'std_snr_g', 'std_snr_r']
 	feature_matrix = pd.DataFrame([], columns = columns_feat)
 
 	# Load
@@ -383,11 +441,21 @@ def extract_features_nontdes_zenodo(which_data, save = True, nb_files = None, sh
 												result_type = 'expand', axis = 1)
 	feature_matrix.dropna(inplace = True)
 	feature_matrix['data_origin'] = which_data
+	"""
+	feature_matrix = pd.read_csv(os.path.join(Config.OUT_FEATURES_DIR, 'all_alerts_per_object',
+										    'features_{}.csv'.format(which_data)))
+	"""
+	if keep_only_last_alert:
+		feature_matrix = keep_only_feat_last_alert_per_object(feature_matrix, zenodo_data)
+		# Define outdir
+		outdir = os.path.join(Config.OUT_FEATURES_DIR, 'one_alert_per_object')
+	else:
+		outdir = os.path.join(Config.OUT_FEATURES_DIR, 'all_alerts_per_object')
 
 	# Save features into csv
 	if save:
 		feature_matrix.to_csv(os.path.join(
-			Config.OUT_FEATURES_DIR, 'features_{}.csv'.format(which_data)), index = False)
+			outdir, 'features_{}.csv'.format(which_data)), index = False)
 	return feature_matrix
 
 
@@ -399,24 +467,32 @@ def extract_features(data_origin, max_nb_files_simbad = None, **kwargs):
 	----------
 	data_origin : str
 		Which data to process. 'tdes_ztf', 'tns', 'simbad', or 'all'.
-	**kwargs: Other arguments, such as save, or nb_files.
+	**kwargs: Other arguments, such as save, nb_files or show_plots.
 
 	"""
 
-
 	if data_origin == 'tdes_ztf':
-		extract_features_tdes(**kwargs)
+		return extract_features_tdes(**kwargs)
 	elif data_origin in ['simbad', 'tns']:
-		extract_features_nontdes_zenodo(data_origin, nb_files = max_nb_files_simbad, **kwargs)
+		return extract_features_nontdes_zenodo(data_origin, nb_files = max_nb_files_simbad, **kwargs)
 	elif data_origin == 'all':
-		extract_features_tdes(**kwargs)
-		extract_features_nontdes_zenodo('simbad', nb_files = max_nb_files_simbad,  **kwargs)
-		extract_features_nontdes_zenodo('tns', **kwargs)
+		feat_tdes = extract_features_tdes(**kwargs)
+		feat_simbad = extract_features_nontdes_zenodo('simbad', nb_files = max_nb_files_simbad, **kwargs)
+		feat_tns = extract_features_nontdes_zenodo('tns', **kwargs)
+
+		# Merge and save features
+		all_features = pd.concat([feat_tdes, feat_simbad, feat_tns])
+		if "save" in kwargs:
+			all_features.to_csv(os.path.join(
+				Config.OUT_FEATURES_DIR, 'features_all.csv'), index = False)
+		return all_features
+
 
 if __name__ == '__main__':
 
 	start = dt.datetime.now()
 
-	extract_features('all', max_nb_files_simbad = 2)
+	extract_features('all', max_nb_files_simbad = 2, keep_only_last_alert=True, save = True,
+				   show_plots = False)
 
 	logging .info("Done in {} seconds.".format(dt.datetime.now() - start))
