@@ -172,7 +172,7 @@ session_ex1 = Session(
 		metadata=labels_integer,
 		model=model_ex1,
 		decision_callback=lambda metadata, data, session: metadata,
-		on_decision_callbacks=TerminateAfter(50000),
+		on_decision_callbacks=TerminateAfter(300),
 )
 
 session_ex1.run()
