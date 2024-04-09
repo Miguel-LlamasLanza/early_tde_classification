@@ -107,9 +107,7 @@ def convert_full_dataset(pdf: pd.DataFrame, obj_id_header='candid'):
 	lc_flux_sig = pd.DataFrame(lc_flux_sig, columns=['id', 'type', 'MJD',
 													 'FLT', 'FLUXCAL',
 													 'FLUXCALERR'])
-
 	return lc_flux_sig
-
 
 
 def add_alert_history_to_df(df, prefix = 'c'):

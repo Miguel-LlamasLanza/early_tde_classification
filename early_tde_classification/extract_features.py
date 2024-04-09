@@ -69,7 +69,7 @@ def load_zenodo_data(which_data = 'all_zenodo', keep_only_one_per_object = False
 	all_obj_df['length'] = all_obj_df['cjd'].apply(lambda x: len(x))
 
 	if keep_only_one_per_object:
-		# Keep only row with all alerts  (not used anymore here, but left to see if it is worth using after extracting feat)
+		# Keep only row with all alerts (not used anymore here, but left to see if it is worth using after extracting feat)
 		all_obj_df.sort_values(['objectId', 'length'], inplace = True)
 		names = np.array(all_obj_df['objectId'])
 		mask = np.append((names[:-1] != names[1:]), True)
@@ -86,8 +86,7 @@ def load_zenodo_data(which_data = 'all_zenodo', keep_only_one_per_object = False
 								  'cdsxmatch': 'type'}, inplace = True)
 
 	if alert_list:
-		all_obj_df = all_obj_df[all_obj_df.candid.isin(object_list)]
-
+		all_obj_df = all_obj_df[all_obj_df.candid.isin(alert_list)]
 
 	logging.info('All zenodo files loaded')
 
@@ -134,8 +133,7 @@ def load_tdes_ztf(min_points_fit = 5, object_list = None, alert_list = None):
 	df['candid'] = df['objectId'] + '-' + df['length'].astype(str)
 
 	if alert_list:
-		df = df[df.candid.isin(object_list)]
-
+		df = df[df.candid.isin(alert_list)]
 
 	return df
 
@@ -168,8 +166,8 @@ def is_sorted(a):
 	return np.all(a[:-1] <= a[1:])
 
 
-def get_rising_flags_per_filter(mjd, flux, fluxerr, flt,
-						min_data_points=5, list_filters=['g', 'r'], low_bound=-10, sigma_rise = 1):
+def get_rising_flags_per_filter(mjd, flux, fluxerr, flt, min_data_points=5, list_filters=['g', 'r'],
+								low_bound=-10, sigma_rise = 1, sigma_decay=1):
 	"""Filter only rising alerts for Rainbow fit.
 
 	Parameters
@@ -195,7 +193,8 @@ def get_rising_flags_per_filter(mjd, flux, fluxerr, flt,
 	if is_sorted(mjd):
 
 		# flags if filter survived selection cuts
-		filter_flags = dict([[item, False] for item in list_filters])
+		rising_flags = dict([[item, False] for item in list_filters])
+		decay_flags = dict([[item, False] for item in list_filters])
 
 		if mjd.shape[0] >= min_data_points:
 
@@ -212,6 +211,8 @@ def get_rising_flags_per_filter(mjd, flux, fluxerr, flt,
 				fluxerr_filter= fluxerr[final_flag]
 
 				rising_flag = False
+				decay_flag = False
+
 				if len(flux_filter)>1:
 					lc = pd.DataFrame()
 					lc['FLUXCAL'] = flux_filter
@@ -221,25 +222,29 @@ def get_rising_flags_per_filter(mjd, flux, fluxerr, flt,
 					# check if it is rising (lower bound of last alert is larger than the smallest upper bound)
 					# and not yet decreasing (upper bound of last alert is larger than the largest lower bound)
 					avg_data = average_intraday_data(lc)
-					sigma_factor = sigma_rise / np.sqrt(2)
+					sigma_rise_factor = sigma_rise / np.sqrt(2)
+					sigma_decay_factor = sigma_decay / np.sqrt(2)
 					if len(avg_data) > 1:
 						rising_flag = (
-							((avg_data['FLUXCAL'].values[-1] + avg_data['FLUXCALERR'].values[-1])
-							> np.nanmax(avg_data['FLUXCAL'].values - avg_data['FLUXCALERR'].values))
-							& (avg_data['FLUXCAL'].values[-1] - sigma_factor * avg_data['FLUXCALERR'].values[-1]
-							>np.nanmin(avg_data['FLUXCAL'].values + sigma_factor * avg_data['FLUXCALERR'].values)))
+							  (avg_data['FLUXCAL'].values[-1] - sigma_rise_factor * avg_data['FLUXCALERR'].values[-1]
+						  >np.nanmin(avg_data['FLUXCAL'].values + sigma_rise_factor * avg_data['FLUXCALERR'].values)))
+						decay_flag = ((avg_data['FLUXCAL'].values[-1] + sigma_decay_factor*avg_data['FLUXCALERR'].values[-1])
+						  < np.nanmax(avg_data['FLUXCAL'].values - sigma_decay_factor*avg_data['FLUXCALERR'].values))
 
-					filter_flags[i] = rising_flag
+					rising_flags[i] = rising_flag
+					decay_flags[i] = decay_flag
 				else:
-					filter_flags[i] = False
+					rising_flags[i] = False
+					decay_flags[i] = False
 		else:
 			for i in list_filters:
-				filter_flags[i] = False
+				rising_flags[i] = False
+				decay_flags[i] = False
 
 	else:
 		raise ValueError('MJD is not sorted!')
 
-	return filter_flags
+	return rising_flags, decay_flags
 
 
 def plot_lightcurve_and_fit(lc_values, filt_list, values_fit, err_fit, feature, title = ''):
@@ -365,9 +370,12 @@ def feature_extractor_for_row_df(row_obj, feature, flux_conv_required = True,
 	lc_values = lc_values[:, last_good_index:]
 
 	# Check whether it is rising
-	rising_flag = any(get_rising_flags_per_filter(*lc_values, list_filters = [1, 2]).values())
+	rising_flag, decaying_flag = get_rising_flags_per_filter(*lc_values, list_filters = [1, 2])
+	final_flag = any(rising_flag.values()) and not any(decaying_flag.values())
 
-	if (rising_flag) & (lc_values.shape[1] >= min_nb_points_fit):
+# 	rising_flag = any(get_rising_flags_per_filter(*lc_values, list_filters = [1, 2]).values())
+
+	if (final_flag) & (lc_values.shape[1] >= min_nb_points_fit):
 
 		# Normalization
 		norm = np.max(lc_values[1])
@@ -386,6 +394,17 @@ def feature_extractor_for_row_df(row_obj, feature, flux_conv_required = True,
 
 		# Add general statistics of lc as features: std_g, std_r, snr_g, snr_r
 		std_and_snr = get_std_and_snr(lc_values, filt_list)
+		"""
+		# Save some temporal features of the fit to further filter
+		sigmoid_center_ref = (lc_values[0, -1] - values_fit[0]) / values_fit[2]
+		snr_rise_time = values_fit[2] / err_fit[2]
+
+		list_to_save = [name, alertid, trans_type, sigmoid_center_ref, snr_rise_time]
+		df_to_save = pd.DataFrame(data=[list_to_save], columns = ['objectId', 'alertId', 'type', 'sigmoid_dist',
+							   'snr_rise_time'])
+
+		df_to_save.to_csv('analysis/post_fit_temporal_features.csv', mode='a', index = False, header = False)
+		"""
 
 		# Plot
 		if show_plots:
@@ -475,7 +494,7 @@ def get_final_feature_dataframe_and_save(feature_matrix, input_df, save, keep_on
 
 
 def extract_features_tdes(save = True, show_plots = False, keep_only_last_alert = False,
-						  object_list = None):
+						  object_list = None, alert_list = None):
 	"""
 	Extract features (with rainbow) for TDEs from ZTF, from lightcurves (one lightcurve per alert)
 
@@ -503,7 +522,7 @@ def extract_features_tdes(save = True, show_plots = False, keep_only_last_alert 
 	feature_matrix = pd.DataFrame([], columns = columns_feat)
 
 	# Load
-	ztf_tde_data = load_tdes_ztf(object_list = object_list)
+	ztf_tde_data = load_tdes_ztf(object_list = object_list, alert_list = alert_list)
 
 	# Get features
 	feature_matrix[columns_feat] = ztf_tde_data.apply(
@@ -518,7 +537,8 @@ def extract_features_tdes(save = True, show_plots = False, keep_only_last_alert 
 
 
 def extract_features_nontdes_zenodo(which_data, save = True, nb_files = None, show_plots = False,
-									keep_only_last_alert = False, object_list = None):
+									keep_only_last_alert = False, object_list = None,
+									alert_list = None):
 	"""
 	Extract features (with rainbow) for non-TDE objects from Zenodo dataset (one LC per alert)
 
@@ -551,7 +571,8 @@ def extract_features_nontdes_zenodo(which_data, save = True, nb_files = None, sh
 	feature_matrix = pd.DataFrame([], columns = columns_feat)
 
 	# Load
-	zenodo_data = load_zenodo_data(which_data, nb_files = nb_files, object_list = object_list)
+	zenodo_data = load_zenodo_data(which_data, nb_files = nb_files, object_list = object_list,
+								alert_list = alert_list)
 
 	# Get features
 	feature_matrix[columns_feat] = zenodo_data.apply(
