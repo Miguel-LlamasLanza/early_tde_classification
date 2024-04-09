@@ -24,6 +24,26 @@ logging.basicConfig(encoding='utf-8', level=logging.INFO)
 
 def load_zenodo_data(which_data = 'all_zenodo', keep_only_one_per_object = False,
 					 min_points_fit = 5, nb_files = None):
+	"""
+	Load data from parquet files downloaded from zenodo (from SNIa paper)
+
+	Parameters
+	----------
+	which_data : str, optional
+		"Whether to load 'simbad', 'tns' or 'all_zenodo' parquet files.". The default is 'all_zenodo'.
+	keep_only_one_per_object : bool, optional
+		Keep only last alert of the object. The default is False. NOT USED CURRENTLY !!
+	min_points_fit : int, optional
+		Min number of datapoints in the LC required for the fit, in all filters. The default is 5.
+	nb_files : int (or None), optional
+		(maximum) number of parquet files to load. The default value "None" loads all files.
+
+	Returns
+	-------
+	all_obj_df : pd.DataFrame
+		Dta loaded from zenodo.
+
+	"""
 
 	path_parquet_files = Config.ZENODO_DATA_DIR
 	if which_data == 'all_zenodo':
@@ -63,6 +83,20 @@ def load_zenodo_data(which_data = 'all_zenodo', keep_only_one_per_object = False
 
 
 def load_tdes_ztf(min_points_fit = 5):
+	"""
+	Load data from TDEs csv (and format it as required)
+
+	Parameters
+	----------
+	min_points_fit : int, optional
+		Min number of datapoints in the LC required for the fit, in all filters. The default is 5.
+
+	Returns
+	-------
+	df : pd.DataFrame
+		Dataset for TDEs.
+
+	"""
 
 	df = pd.read_csv(os.path.join(Config.ZTF_TDE_DATA_DIR, 'all_tde_in_ztf.csv'), dtype={'id': str})
 	df['type'] = 'TDE'
@@ -307,6 +341,10 @@ def feature_extractor_for_row_df(row_obj, feature, flux_conv_required = True,
 
 	# Delete duplicate times
 	lc_values = np.delete(lc_values, np.where(np.diff(lc_values[0]) == 0)[0], axis = 1)
+	# Crop to keep the last 30 days only, to simulate alerts
+	last_good_index = np.where(lc_values[0] > lc_values[0][-1] - 30)[0][0]
+	lc_values = lc_values[:, last_good_index:]
+
 	# Check whether it is rising
 	rising_flag = any(get_rising_flags_per_filter(*lc_values, list_filters = [1, 2]).values())
 
@@ -341,10 +379,79 @@ def feature_extractor_for_row_df(row_obj, feature, flux_conv_required = True,
 
 
 def keep_only_feat_last_alert_per_object(feature_matrix, input_data):
+	"""
+	Function to drop all alerts except the last one for each object, in the features dataframe.
+
+	Parameters
+	----------
+	feature_matrix : pd.DataFrame
+		Feature Dataframe obtained after applying cuts and fitting with Rainbow. It should have at
+		least 'alertId' and 'objId' columns
+	input_data : pd.DataFrame
+		Input df corresponding to the features. Should have at least 'length' and 'candid' columns.
+
+	Returns
+	-------
+	feature_matrix : pd.DataFrame
+		Features df after with only the last alert per object.
+
+	"""
 
 	merged = feature_matrix[['alertId', 'objId']].merge(input_data[['length', 'candid']], how = 'left',
 							   left_on = 'alertId', right_on='candid')
 	feature_matrix = feature_matrix.iloc[merged.groupby('objId')['length'].idxmax()]
+	return feature_matrix
+
+
+def get_final_feature_dataframe_and_save(feature_matrix, input_df, save, keep_only_last_alert,
+										 data_origin):
+	"""
+	Common 'postprocessing' function after feature extraction for TDEs and other objects.
+
+	Saves (if 'save'==True) all features in csv inside 'all_alerts_per_object' folder and filters
+	'features_matrix' to only one alert per object if 'keep_only_last_alert' is True. In this case,
+	also saves the reduced dataframe into csv in 'one_alert_per_object' folder.
+
+	Finally, it saves (if 'save' is True) the resulting feature_matrix df in the main output folder.
+
+	Parameters
+	----------
+	feature_matrix : pd.DataFrame
+		Extracted features matrix.
+	input_df : pd.DataFrame
+		Input df with alert data, which was used to obtain feature_matrix.
+	save : bool
+		Whether to save the features into a csv.
+	keep_only_last_alert : bool
+		Keep only last alert that passed the cuts per object
+	which_data : str
+		Whether data is load 'simbad', 'tns' or 'tdes_ztf'
+
+	Returns
+	-------
+	feature_matrix : pd.DataFrame
+		Extracted features matrix.
+
+	"""
+
+	if save:
+		# Save all features
+		os.mkdirs(os.path.join(Config.OUT_FEATURES_DIR, 'all_alerts_per_object'), exist_ok = True)
+		feature_matrix.to_csv(os.path.join(Config.OUT_FEATURES_DIR, 'all_alerts_per_object',
+									 'features_tdes_ztf.csv'), index = False)
+
+	if keep_only_last_alert:
+		# Keep only last alert that passed the cut per object
+		feature_matrix = keep_only_feat_last_alert_per_object(feature_matrix, input_df)
+		if save:
+			os.mkdirs(os.path.join(Config.OUT_FEATURES_DIR, 'one_alert_per_object'), exist_ok = True)
+			feature_matrix.to_csv(os.path.join(Config.OUT_FEATURES_DIR, 'one_alert_per_object',
+									 'features_tdes_ztf.csv'), index = False)
+
+	# Save features into csv in general folder
+	if save:
+		feature_matrix.to_csv(os.path.join(Config.OUT_FEATURES_DIR, 'features_tdes_ztf.csv'),
+							  index = False)
 	return feature_matrix
 
 
@@ -371,7 +478,7 @@ def extract_features_tdes(save = True, show_plots = False, keep_only_last_alert 
 	columns_feat = ['objId', 'alertId', 'type', 'nb_points', 'norm',
 				  'ref_time', 'amplitude', 'rise_time', 'temperature', 'r_chisq',
 					'err_ref_time', 'err_amplitude', 'err_rise_time', 'err_temperature',
-					'std_g', 'std_r', 'snr_g', 'snr_r']
+					'std_flux_g', 'std_flux_r', 'std_snr_g', 'std_snr_r']
 
 	feature_matrix = pd.DataFrame([], columns = columns_feat)
 
@@ -383,21 +490,10 @@ def extract_features_tdes(save = True, show_plots = False, keep_only_last_alert 
 		lambda x: feature_extractor_for_row_df(x, feature, flux_conv_required=False,
 										  show_plots = show_plots), result_type = 'expand', axis = 1)
 	feature_matrix.dropna(inplace = True)
-	feature_matrix['data_origin'] = 'ztf_tdes'
+	feature_matrix['data_origin'] = 'tdes_ztf'
 
-	# Keep only last alert that passed the cut per object
-	if keep_only_last_alert:
-		feature_matrix = keep_only_feat_last_alert_per_object(feature_matrix, ztf_tde_data)
-		outdir = os.path.join(Config.OUT_FEATURES_DIR, 'one_alert_per_object')
-	else:
-		outdir = os.path.join(Config.OUT_FEATURES_DIR, 'all_alerts_per_object')
-
-	# Save features into csv
-	if save:
-# 		feature_matrix.to_csv(os.path.join(Config.OUT_FEATURES_DIR, 'features_tdes_ztf.csv'),
-# 							  index = False)
-		feature_matrix.to_csv(os.path.join(outdir, 'features_tdes_ztf.csv'),
-							  index = False)
+	feature_matrix = get_final_feature_dataframe_and_save(feature_matrix, ztf_tde_data, save,
+													   keep_only_last_alert, 'tdes_ztf')
 	return feature_matrix
 
 
@@ -443,21 +539,8 @@ def extract_features_nontdes_zenodo(which_data, save = True, nb_files = None, sh
 												result_type = 'expand', axis = 1)
 	feature_matrix.dropna(inplace = True)
 	feature_matrix['data_origin'] = which_data
-	"""
-	feature_matrix = pd.read_csv(os.path.join(Config.OUT_FEATURES_DIR, 'all_alerts_per_object',
-										    'features_{}.csv'.format(which_data)))
-	"""
-	if keep_only_last_alert:
-		feature_matrix = keep_only_feat_last_alert_per_object(feature_matrix, zenodo_data)
-		# Define outdir
-		outdir = os.path.join(Config.OUT_FEATURES_DIR, 'one_alert_per_object')
-	else:
-		outdir = os.path.join(Config.OUT_FEATURES_DIR, 'all_alerts_per_object')
-
-	# Save features into csv
-	if save:
-		feature_matrix.to_csv(os.path.join(
-			outdir, 'features_{}.csv'.format(which_data)), index = False)
+	feature_matrix = get_final_feature_dataframe_and_save(feature_matrix, zenodo_data, save,
+													   keep_only_last_alert, 'tdes_ztf')
 	return feature_matrix
 
 
@@ -496,7 +579,7 @@ if __name__ == '__main__':
 
 	start = dt.datetime.now()
 
-	extract_features('all', max_nb_files_simbad = 2, keep_only_last_alert=True, save = True,
+	extract_features('tdes_ztf', max_nb_files_simbad = 2, keep_only_last_alert=True, save = True,
 				   show_plots = False)
 
 	logging .info("Done in {} seconds.".format(dt.datetime.now() - start))
