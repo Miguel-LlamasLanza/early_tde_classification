@@ -58,15 +58,17 @@ def plot_hists(scores, mask_tdes, mask_tns, mask_simbad):
 scores_pine = pd.read_csv(os.path.join(Config.ANOMALY_DET_DATA_DIR, 'scores_pine.csv'))
 scores_iso = pd.read_csv(os.path.join(Config.ANOMALY_DET_DATA_DIR, 'scores_iso.csv'))
 
-mask_tdes = scores_pine.labels == 'ztf_tdes'
+mask_tdes = scores_pine.labels == 'tdes_ztf'
 mask_tns = scores_pine.labels == 'tns'
 mask_simbad = scores_pine.labels == 'simbad'
 
 plot_hists(scores_pine.scores, mask_tdes, mask_tns, mask_simbad)
+plt.suptitle('Pineforest with AL')
 
-mask_tdes = scores_iso.labels == 'ztf_tdes'
+mask_tdes = scores_iso.labels == 'tdes_ztf'
 mask_tns = scores_iso.labels == 'tns'
 mask_simbad = scores_iso.labels == 'simbad'
 
 plot_hists(scores_iso.scores, mask_tdes, mask_tns, mask_simbad)
+plt.suptitle('Isolation forest (no AL)')
 

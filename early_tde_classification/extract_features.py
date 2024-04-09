@@ -14,16 +14,22 @@ import numpy as np
 import matplotlib.pyplot as plt
 import datetime as dt
 
+try:
+	from early_tde_classification.conversion_tools import mag2fluxcal_snana, add_alert_history_to_df
+	from early_tde_classification.config import Config
 
-from conversion_tools import mag2fluxcal_snana, add_alert_history_to_df
+except ModuleNotFoundError:
+	from conversion_tools import mag2fluxcal_snana, add_alert_history_to_df
+	from config import Config
+
+
 from light_curve.light_curve_py import RainbowFit
-from config import Config
 
 logging.basicConfig(encoding='utf-8', level=logging.INFO)
 
 
 def load_zenodo_data(which_data = 'all_zenodo', keep_only_one_per_object = False,
-					 min_points_fit = 5, nb_files = None):
+					 min_points_fit = 5, nb_files = None, object_list = None, alert_list = None):
 	"""
 	Load data from parquet files downloaded from zenodo (from SNIa paper)
 
@@ -56,6 +62,8 @@ def load_zenodo_data(which_data = 'all_zenodo', keep_only_one_per_object = False
 
 	logging.info('Loading parquet files')
 	all_obj_df = pd.concat([pd.read_parquet(parquet_fname) for parquet_fname in all_parquet_fnames])
+	if object_list:
+		all_obj_df = all_obj_df[all_obj_df.objectId.isin(object_list)]
 
 	# Get lenngth of alerts history per alert
 	all_obj_df['length'] = all_obj_df['cjd'].apply(lambda x: len(x))
@@ -77,12 +85,16 @@ def load_zenodo_data(which_data = 'all_zenodo', keep_only_one_per_object = False
 	all_obj_df.rename(columns = {'TNS': 'type',
 								  'cdsxmatch': 'type'}, inplace = True)
 
+	if alert_list:
+		all_obj_df = all_obj_df[all_obj_df.candid.isin(object_list)]
+
+
 	logging.info('All zenodo files loaded')
 
 	return all_obj_df
 
 
-def load_tdes_ztf(min_points_fit = 5):
+def load_tdes_ztf(min_points_fit = 5, object_list = None, alert_list = None):
 	"""
 	Load data from TDEs csv (and format it as required)
 
@@ -102,6 +114,9 @@ def load_tdes_ztf(min_points_fit = 5):
 	df['type'] = 'TDE'
 	df.drop(columns = 'id', inplace=True)
 
+	if object_list:
+		df = df[df.objectId.isin(object_list)]
+
 	# Remove outliers
 	df = df[~df.objectId.isin(['ZTF18acpdvos', 'ZTF18aabtxvd', 'ZTF18aahqkbt'])]
 	# Convert filter name (str) to filter ID (int)
@@ -117,6 +132,10 @@ def load_tdes_ztf(min_points_fit = 5):
 	df = df[df['length'] >= min_points_fit]
 	# Create a dummy candid based on the length
 	df['candid'] = df['objectId'] + '-' + df['length'].astype(str)
+
+	if alert_list:
+		df = df[df.candid.isin(object_list)]
+
 
 	return df
 
@@ -436,7 +455,7 @@ def get_final_feature_dataframe_and_save(feature_matrix, input_df, save, keep_on
 
 	if save:
 		# Save all features
-		os.mkdirs(os.path.join(Config.OUT_FEATURES_DIR, 'all_alerts_per_object'), exist_ok = True)
+		os.makedirs(os.path.join(Config.OUT_FEATURES_DIR, 'all_alerts_per_object'), exist_ok = True)
 		feature_matrix.to_csv(os.path.join(Config.OUT_FEATURES_DIR, 'all_alerts_per_object',
 									 'features_tdes_ztf.csv'), index = False)
 
@@ -444,7 +463,7 @@ def get_final_feature_dataframe_and_save(feature_matrix, input_df, save, keep_on
 		# Keep only last alert that passed the cut per object
 		feature_matrix = keep_only_feat_last_alert_per_object(feature_matrix, input_df)
 		if save:
-			os.mkdirs(os.path.join(Config.OUT_FEATURES_DIR, 'one_alert_per_object'), exist_ok = True)
+			os.makedirs(os.path.join(Config.OUT_FEATURES_DIR, 'one_alert_per_object'), exist_ok = True)
 			feature_matrix.to_csv(os.path.join(Config.OUT_FEATURES_DIR, 'one_alert_per_object',
 									 'features_tdes_ztf.csv'), index = False)
 
@@ -455,7 +474,8 @@ def get_final_feature_dataframe_and_save(feature_matrix, input_df, save, keep_on
 	return feature_matrix
 
 
-def extract_features_tdes(save = True, show_plots = False, keep_only_last_alert = False):
+def extract_features_tdes(save = True, show_plots = False, keep_only_last_alert = False,
+						  object_list = None):
 	"""
 	Extract features (with rainbow) for TDEs from ZTF, from lightcurves (one lightcurve per alert)
 
@@ -483,7 +503,7 @@ def extract_features_tdes(save = True, show_plots = False, keep_only_last_alert 
 	feature_matrix = pd.DataFrame([], columns = columns_feat)
 
 	# Load
-	ztf_tde_data = load_tdes_ztf()
+	ztf_tde_data = load_tdes_ztf(object_list = object_list)
 
 	# Get features
 	feature_matrix[columns_feat] = ztf_tde_data.apply(
@@ -498,7 +518,7 @@ def extract_features_tdes(save = True, show_plots = False, keep_only_last_alert 
 
 
 def extract_features_nontdes_zenodo(which_data, save = True, nb_files = None, show_plots = False,
-									keep_only_last_alert = False):
+									keep_only_last_alert = False, object_list = None):
 	"""
 	Extract features (with rainbow) for non-TDE objects from Zenodo dataset (one LC per alert)
 
@@ -531,7 +551,7 @@ def extract_features_nontdes_zenodo(which_data, save = True, nb_files = None, sh
 	feature_matrix = pd.DataFrame([], columns = columns_feat)
 
 	# Load
-	zenodo_data = load_zenodo_data(which_data, nb_files = nb_files)
+	zenodo_data = load_zenodo_data(which_data, nb_files = nb_files, object_list = object_list)
 
 	# Get features
 	feature_matrix[columns_feat] = zenodo_data.apply(
@@ -540,7 +560,7 @@ def extract_features_nontdes_zenodo(which_data, save = True, nb_files = None, sh
 	feature_matrix.dropna(inplace = True)
 	feature_matrix['data_origin'] = which_data
 	feature_matrix = get_final_feature_dataframe_and_save(feature_matrix, zenodo_data, save,
-													   keep_only_last_alert, 'tdes_ztf')
+													   keep_only_last_alert, which_data)
 	return feature_matrix
 
 

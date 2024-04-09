@@ -105,7 +105,7 @@ start = time.time()
 
 # Load
 df, labels = load_features(os.path.join(Config.OUT_FEATURES_DIR, 'features_all.csv'))
-labels[labels == 'tdes_ztf'] = 'TDE'
+labels[labels == 'ztf_tdes'] = 'TDE'
 feat_data_to_fit = df.to_numpy()   	# This is 2d np.array
 
 # Create masks per type
@@ -172,7 +172,7 @@ session_ex1 = Session(
 		metadata=labels_integer,
 		model=model_ex1,
 		decision_callback=lambda metadata, data, session: metadata,
-		on_decision_callbacks=TerminateAfter(300),
+		on_decision_callbacks=TerminateAfter(1000),
 )
 
 session_ex1.run()

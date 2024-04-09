@@ -16,8 +16,10 @@ from config import Config
 
 
 # Choose subfolder (one alert or all alerts)
-outdir = os.path.join(Config.OUT_FEATURES_DIR, 'one_alert_per_object')
+# outdir = os.path.join(Config.OUT_FEATURES_DIR, 'one_alert_per_object')
 # outdir = os.path.join(Config.OUT_FEATURES_DIR, 'all_alerts_per_object')
+outdir = os.path.join(Config.OUT_FEATURES_DIR)
+
 
 
 # Define paths
