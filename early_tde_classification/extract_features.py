@@ -219,9 +219,10 @@ def get_rising_flags_per_filter(mjd, flux, fluxerr, flt, min_data_points=5, list
 					lc['FLUXCALERR'] = fluxerr_filter
 					lc['MJD'] = 0.1 * mjd[final_flag]
 
+					avg_data = average_intraday_data(lc)
+
 					# check if it is rising (lower bound of last alert is larger than the smallest upper bound)
 					# and not yet decreasing (upper bound of last alert is larger than the largest lower bound)
-					avg_data = average_intraday_data(lc)
 					sigma_rise_factor = sigma_rise / np.sqrt(2)
 					sigma_decay_factor = sigma_decay / np.sqrt(2)
 					if len(avg_data) > 1:

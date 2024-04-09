@@ -24,7 +24,7 @@ Then, simply install this project with
 ```
 pip install -e .
 ```
-You might need to install other packages as `matplotlib` or `pandas`.
+You might need to install other packages such as `matplotlib` or `pandas`.
 
 ## Usage
 
@@ -33,4 +33,5 @@ First, **update the config.py file** to match your preference. You need to updat
 The features can be extracted using the extract\_features.py script, where you can manually specify on which data you want to perform the feature extraction.
 The features should be merged into the features_all.csv file. The script merge\_csvs.py can also be used to put all the extracted features in the same csv.
 
-Then, you can use the **python script** in the anomaly detection folder, in order to run the SNAD\_AAD method on the extracted features.
+Then, you can use the **python script** snad_aad.py in the anomaly detection folder, in order to run the SNAD\_AAD method on the extracted features.
+
