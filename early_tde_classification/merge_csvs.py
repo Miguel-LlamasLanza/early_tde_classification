@@ -39,6 +39,7 @@ if out_csv_fname in all_csvs:
 all_features = []
 for csv_fname in all_csvs:
 	df = pd.read_csv(csv_fname)
+# 	df = df.drop(columns = 'alertId')
 	if 'data_origin' not in df.columns:
 		df['data_origin'] = os.path.basename(csv_fname)[9:-4]
 	all_features.append(df)
