@@ -5,6 +5,14 @@ import matplotlib.pyplot as plt
 from collections import Counter
 from sklearn.preprocessing import StandardScaler
 
+
+golden = ['ZTF17aaazdba','ZTF19aabbnzo',
+              'ZTF19aapreis','ZTF19aarioci',
+              'ZTF19abhhjcc','ZTF19abzrhgq',
+              'ZTF20abfcszi','ZTF20abjwvae',
+              'ZTF20acitpfz','ZTF20acqoiyt']
+
+
 def get_data(path):
     
     data = pd.read_csv(path)
@@ -12,6 +20,10 @@ def get_data(path):
     
     # Remove the duplicate TDE
     data = data[~((data.objId.isin(['ZTF20abfcszi'])) & (data.data_origin == 'tdes_ztf'))]
+    
+    # Keep only the golden sample for TDE
+    data = data[(data['objId'].isin(golden)) | (data['type']!='TDE')]
+    
     data.reset_index(inplace=True, drop=True)
     
     to_drop = {'objId', 'alertId', 'type', 'data_origin','ref_time', 'err_ref_time'}
