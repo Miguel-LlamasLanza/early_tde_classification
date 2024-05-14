@@ -13,6 +13,7 @@ import logging
 import numpy as np
 import matplotlib.pyplot as plt
 import datetime as dt
+import astropy
 
 try:
 	from early_tde_classification.conversion_tools import mag2fluxcal_snana, add_alert_history_to_df
@@ -118,6 +119,7 @@ def load_tdes_ztf(min_points_fit = 5, object_list = None, alert_list = None):
 
 	# Remove outliers
 	df = df[~df.objectId.isin(['ZTF18acpdvos', 'ZTF18aabtxvd', 'ZTF18aahqkbt'])]
+
 	# Convert filter name (str) to filter ID (int)
 	inverse_filt_conv = {v: k for k, v in Config.filt_conv.items()}
 	df['FLT'] = np.vectorize(inverse_filt_conv.get)(df.FLT.astype(str))
@@ -137,7 +139,7 @@ def load_tdes_ztf(min_points_fit = 5, object_list = None, alert_list = None):
 	return df
 
 
-def load_extragalatic_data_full_lightcurves(object_list = None):
+def load_extragalatic_data_full_lightcurves(object_list = None, alert_list = None):
 
 	df = pd.read_parquet(os.path.join(Config.DATA_DIR,
 							   'extragal_JUN_JUL_AGO_2020_full_lightcurves.parquet'))
@@ -145,9 +147,8 @@ def load_extragalatic_data_full_lightcurves(object_list = None):
 	df.columns = df.columns.str.lstrip('i:')  # strip prefix
 	if object_list:
 		df = df[df.objectId.isin(object_list)]
-
-
-# 	df = df.head(10000)
+	if alert_list:
+		df = df[df.candid.isin(alert_list)]
 
 	return df
 
@@ -264,7 +265,8 @@ def get_rising_flags_per_filter(mjd, flux, fluxerr, flt, min_data_points=5, list
 	return rising_flags, decay_flags
 
 
-def plot_lightcurve_and_fit(lc_values, filt_list, values_fit, err_fit, feature, title = ''):
+def plot_lightcurve_and_fit(lc_values, filt_list, values_fit, err_fit, feature,
+							 sigmoid_center_ref, snr_rise_time, snr_amplitude, title = ''):
 	"""
 	Plot lightcurve in all bands, with the rainbow fit.
 
@@ -288,7 +290,10 @@ def plot_lightcurve_and_fit(lc_values, filt_list, values_fit, err_fit, feature, 
 	X = np.linspace(lc_values[0].min() - 10, lc_values[0].max() + 10, 500)
 
 	plt.figure(figsize=(12, 8))
-	# ax = plt.gca()
+	ax = plt.gca()
+
+	ax.set_xlabel('Time (MDJ)')
+	ax.set_ylabel('Normalised flux')
 
 # 	colors = ['green', 'red', 'black']
 	colors = ['#15284F', '#F5622E']
@@ -309,12 +314,19 @@ def plot_lightcurve_and_fit(lc_values, filt_list, values_fit, err_fit, feature, 
 			generated_envelope = np.nanpercentile(generated_lightcurves, [16, 84], axis=0)
 			plt.fill_between(X, generated_envelope[0], generated_envelope[1], alpha=0.2, color=colors[idx])
 
-		# Add text
+	# Add text
 
-# 		plt.text(0,2, 0.8, '{}/n{}/n{}/n{}'.format(*values_fit[1:]))
+	plt.text(0.01, 0.8,
+'Amplitude: {0:.2f}$\pm$ {4:.2f}\n\
+rise time: {1:.2f}$\pm$ {5:.2f}  \n\
+temperature: {2:.2f}$\pm$ {6:.2f}\n\
+r_chisq: {3:.2f}'.format(*values_fit[1:], *err_fit[1:]), transform=ax.transAxes)
+
+	plt.text(0.01, 0.6, 'Sigmoid distance: %.2f\nRise Time SNR: %.2f\nAmplitude SNR: %.2f' % (
+		sigmoid_center_ref, snr_rise_time, snr_amplitude), transform=ax.transAxes)
 
 
-		plt.title(title)
+	plt.title(title)
 	plt.legend()
 
 
@@ -351,14 +363,15 @@ def get_std_and_snr(lc_values, filt_list, filters = ['g', 'r']):
 	return list(std_dev.values()) + list(snr.values())
 
 
-def extract_features_for_lc(lc_values, feature, min_nb_points_fit = 5, show_plots = False,
+def extract_features_for_lc(lc_values_unnormalised, feature, min_nb_points_fit = 5, show_plots = False,
 							title_plot = ''):
-
+	# Create copy
+	lc_values = lc_values_unnormalised.copy()
 # 	# Delete duplicate times
-# 	lc_values = np.delete(lc_values, np.where(np.diff(lc_values[0]) == 0)[0], axis = 1)
+	lc_values = np.delete(lc_values, np.where(np.diff(lc_values[0]) == 0)[0], axis = 1)
 
 	# Check whether it is rising
-	rising_flag, decaying_flag = get_rising_flags_per_filter(*lc_values, list_filters = [1,2])
+	rising_flag, decaying_flag = get_rising_flags_per_filter(*lc_values, list_filters = [1,2], sigma_rise = 2)
 	final_flag = any(rising_flag.values()) and not any(decaying_flag.values())
 
 
@@ -366,11 +379,11 @@ def extract_features_for_lc(lc_values, feature, min_nb_points_fit = 5, show_plot
 
 		# Normalization
 		norm = np.max(lc_values[1])
+
 		lc_values[1], lc_values[2] = lc_values[1] / norm, lc_values[2] / norm
 
 		# Convert filter list to g, r, i strings
 		filt_list = np.vectorize(Config.filt_conv.get)(lc_values[3].astype(int))
-
 
 		# Fit
 		try:
@@ -382,19 +395,28 @@ def extract_features_for_lc(lc_values, feature, min_nb_points_fit = 5, show_plot
 			# Save some temporal features of the fit to further filter
 			sigmoid_center_ref = (lc_values[0, -1] - values_fit[0]) / values_fit[2]
 			snr_rise_time = values_fit[2] / err_fit[2]
+			snr_amplitude = values_fit[1] / err_fit[1]
+
+# 			if (sigmoid_center_ref > 8) or (snr_rise_time < 1.5) or (snr_amplitude < 1.5):
+# 				return list(np.full((17), np.nan))
+# 			else:
+
+# 				print(astropy.time.Time(lc_values[0][-1], format='jd').iso)
+# 				print(astropy.time.Time(lc_values[0][-1], format='jd').mjd)
+
 
 		except RuntimeError:
 			values_fit = list(np.full((5), np.nan))
 			err_fit = std_and_snr = list(np.full((4), np.nan))
-			sigmoid_center_ref = snr_rise_time = np.nan
+			sigmoid_center_ref = snr_rise_time = snr_amplitude = np.nan
 
 		# Plot
 		if show_plots:
 			plot_lightcurve_and_fit(lc_values, filt_list, values_fit, err_fit, feature,
-							title = title_plot)
+						   sigmoid_center_ref, snr_rise_time, snr_amplitude, title = title_plot)
 
-		return [norm] + list(values_fit) + list(err_fit) + std_and_snr + [sigmoid_center_ref, snr_rise_time]
-	return list(np.full((16), np.nan))
+		return [norm] + list(values_fit) + list(err_fit) + std_and_snr + [sigmoid_center_ref, snr_rise_time, snr_amplitude]
+	return list(np.full((17), np.nan))
 
 
 def feature_extractor_full_LC_row_df(row_obj, feature, min_nb_points_fit = 5, show_plots = False):
@@ -417,19 +439,19 @@ def feature_extractor_full_LC_row_df(row_obj, feature, min_nb_points_fit = 5, sh
 	full_lc_values = full_lc_values[:, full_lc_values[0, :].argsort()]
 
 	# Iterate over full lightcurve (from the end) until filter flags are passed.
-	lc_values = full_lc_values
+	lc_values_cropped = full_lc_values
 
 	for i in range(full_lc_values.shape[1] - min_nb_points_fit + 1):
 
-		output_fit = extract_features_for_lc(lc_values, feature, min_nb_points_fit, show_plots,
+		output_fit = extract_features_for_lc(lc_values_cropped, feature, min_nb_points_fit, show_plots,
 							title_plot = 'objectId: %s. Transient type: %s. ' %(name, trans_type))
 
 		if np.isnan(output_fit[1]):
 			# Remove last alert for next iteration
-			lc_values = lc_values[:, :-1]
+			lc_values_cropped = lc_values_cropped[:, :-1]
 		else:
-			return [name, alertid[len(lc_values) - 1], trans_type, len(lc_values[1])] + output_fit
-	return [name, alertid, trans_type] + list(np.full((17), np.nan))
+			return [name, alertid[len(lc_values_cropped) - 1], trans_type, len(lc_values_cropped[1])] + output_fit
+	return [name, alertid, trans_type] + list(np.full((18), np.nan))
 
 
 def feature_extractor_for_row_df(row_obj, feature, flux_conv_required = True,
@@ -472,7 +494,7 @@ def feature_extractor_for_row_df(row_obj, feature, flux_conv_required = True,
 	lc_values = np.delete(lc_values, np.where(np.diff(lc_values[0]) == 0)[0], axis = 1)
 
 	# Check whether it is rising
-	rising_flag, decaying_flag = get_rising_flags_per_filter(*lc_values, list_filters = [1, 2])
+	rising_flag, decaying_flag = get_rising_flags_per_filter(*lc_values, list_filters = [1, 2], sigma_rise = 2)
 	final_flag = any(rising_flag.values()) and not any(decaying_flag.values())
 
 	if (final_flag) & (lc_values.shape[1] >= min_nb_points_fit):
@@ -498,23 +520,22 @@ def feature_extractor_for_row_df(row_obj, feature, flux_conv_required = True,
 		# Save some temporal features of the fit to further filter
 		sigmoid_center_ref = (lc_values[0, -1] - values_fit[0]) / values_fit[2]
 		snr_rise_time = values_fit[2] / err_fit[2]
+		snr_amplitude = values_fit[1] / err_fit[1]
 
-		list_to_save = [name, alertid, trans_type, sigmoid_center_ref, snr_rise_time]
-		df_to_save = pd.DataFrame(data=[list_to_save], columns = ['objectId', 'alertId', 'type', 'sigmoid_dist',
-							   'snr_rise_time'])
+		if (sigmoid_center_ref > 8) or (snr_rise_time < 1.5) or (snr_amplitude < 1.5):
 
-		df_to_save.to_csv('analysis/post_fit_temporal_features.csv', mode='a', index = False, header = False)
-
+			return [name, alertid, trans_type, len(lc_values[1])] + list(np.full((17), np.nan))
 
 		# Plot
 		if show_plots:
-			plot_lightcurve_and_fit(lc_values, filt_list, values_fit, err_fit, feature,
+			plot_lightcurve_and_fit(lc_values, filt_list, values_fit, err_fit, feature,sigmoid_center_ref,
+						   snr_rise_time, snr_amplitude,
 							title = 'objectId: %s. Transient type: %s. ' %(name, trans_type))
 
 		return [name, alertid, trans_type,
 				   len(lc_values[1]), norm] + list(values_fit) + list(err_fit) + std_and_snr + [
-					   sigmoid_center_ref, snr_rise_time]
-	return [name, alertid, trans_type, len(lc_values[1])] + list(np.full((16), np.nan))
+					   sigmoid_center_ref, snr_rise_time, snr_amplitude]
+	return [name, alertid, trans_type, len(lc_values[1])] + list(np.full((17), np.nan))
 
 
 
@@ -595,7 +616,8 @@ def get_final_feature_dataframe_and_save(feature_matrix, input_df, save, keep_on
 	return feature_matrix
 
 
-def extract_feature_extragalactic_obj_full_LC(save = True, show_plots = False, object_list = None):
+def extract_feature_extragalactic_obj_full_LC(save = True, show_plots = False, object_list = None,
+											   alert_list = None):
 
 	# Initialise
 	feature = RainbowFit.from_angstrom(Config.band_wave_aa, with_baseline = False,
@@ -604,12 +626,13 @@ def extract_feature_extragalactic_obj_full_LC(save = True, show_plots = False, o
 				  'ref_time', 'amplitude', 'rise_time', 'temperature', 'r_chisq',
 					'err_ref_time', 'err_amplitude', 'err_rise_time', 'err_temperature',
 					'std_flux_g', 'std_flux_r', 'std_snr_g', 'std_snr_r',
-					'sigmoid_dist', 'snr_rise_time']
+					'sigmoid_dist', 'snr_rise_time', 'snr_amplitude']
 
 	feature_matrix = pd.DataFrame([], columns = columns_feat)
 
 	# Load
-	extragal_data = load_extragalatic_data_full_lightcurves(object_list = object_list,)
+	extragal_data = load_extragalatic_data_full_lightcurves(object_list = object_list,
+														 alert_list = alert_list)
 
 	# Get features
 	feature_matrix[columns_feat] = extragal_data.apply(
@@ -650,7 +673,7 @@ def extract_features_tdes(save = True, show_plots = False, keep_only_last_alert 
 				  'ref_time', 'amplitude', 'rise_time', 'temperature', 'r_chisq',
 					'err_ref_time', 'err_amplitude', 'err_rise_time', 'err_temperature',
 					'std_flux_g', 'std_flux_r', 'std_snr_g', 'std_snr_r',
-					'sigmoid_dist', 'snr_rise_time']
+					'sigmoid_dist', 'snr_rise_time', 'snr_amplitude']
 
 	feature_matrix = pd.DataFrame([], columns = columns_feat)
 
@@ -755,9 +778,11 @@ if __name__ == '__main__':
 
 # 	extract_features('all', max_nb_files_simbad = 2, keep_only_last_alert=True, save = True,
 # 				   show_plots = False)
-	extract_features('tdes_ztf', keep_only_last_alert=True, save = True, show_plots = False)
+# 	feat_tde = extract_features('tdes_ztf', keep_only_last_alert=True, save = True, show_plots = False)
 
-# 	extract_feature_extragalactic_obj_full_LC(save = True, show_plots = False)
+	feat_extragal = extract_feature_extragalactic_obj_full_LC(save = True, show_plots = False)
+
+
 
 
 
