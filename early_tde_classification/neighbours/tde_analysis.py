@@ -13,20 +13,35 @@ golden = ['ZTF17aaazdba','ZTF19aabbnzo',
               'ZTF20acitpfz','ZTF20acqoiyt']
 
 
-def get_data(path):
+def get_data(path, cuts=True):
     
     data = pd.read_csv(path)
     data = data.replace(-999., -1)
     
     # Remove the duplicate TDE
-    data = data[~((data.objId.isin(['ZTF20abfcszi'])) & (data.data_origin == 'tdes_ztf'))]
+    data = data[~((data.objId.isin(['ZTF20abfcszi'])) & (data.data_origin == 'extragal'))]
     
     # Keep only the golden sample for TDE
     data = data[(data['objId'].isin(golden)) | (data['type']!='TDE')]
     
+    if cuts:
+        cuts = (data['temperature'] > 1e4) &\
+        (data['rise_time'] < 1e2) &\
+        (data['amplitude'] < 9.9999) &\
+        (data['snr_rise_time'] > 1.5) &\
+        (data['snr_amplitude'] > 1.5) &\
+        (data['r_chisq'] < 1e2) &\
+        (data['snr_rise_time'] > 1) &\
+        (data['sigmoid_dist'] < 8) &\
+        (data['sigmoid_dist'] > 0)
+
+        data = data[cuts]
+
     data.reset_index(inplace=True, drop=True)
     
-    to_drop = {'objId', 'alertId', 'type', 'data_origin','ref_time', 'err_ref_time'}
+    to_drop = {'objId', 'alertId', 'type', 'data_origin','ref_time', 'err_ref_time',
+       'err_amplitude', 'err_rise_time', 'err_temperature'}
+
     features = data.copy().drop(columns=to_drop)
 
     scaler = StandardScaler()
