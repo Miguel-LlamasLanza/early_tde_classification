@@ -11,6 +11,7 @@ import os
 import glob
 import logging
 import numpy as np
+import math
 import matplotlib.pyplot as plt
 import datetime as dt
 import astropy
@@ -27,71 +28,6 @@ except ModuleNotFoundError:
 from light_curve.light_curve_py import RainbowFit
 
 logging.basicConfig(encoding='utf-8', level=logging.INFO)
-
-
-def load_zenodo_data(which_data = 'all_zenodo', keep_only_one_per_object = False,
-					 min_points_fit = 5, nb_files = None, object_list = None, alert_list = None):
-	"""
-	Load data from parquet files downloaded from zenodo (from SNIa paper)
-
-	Parameters
-	----------
-	which_data : str, optional
-		"Whether to load 'simbad', 'tns' or 'all_zenodo' parquet files.". The default is 'all_zenodo'.
-	keep_only_one_per_object : bool, optional
-		Keep only last alert of the object. The default is False. NOT USED CURRENTLY !!
-	min_points_fit : int, optional
-		Min number of datapoints in the LC required for the fit, in all filters. The default is 5.
-	nb_files : int (or None), optional
-		(maximum) number of parquet files to load. The default value "None" loads all files.
-
-	Returns
-	-------
-	all_obj_df : pd.DataFrame
-		Dta loaded from zenodo.
-
-	"""
-
-	path_parquet_files = Config.ZENODO_DATA_DIR
-	if which_data == 'all_zenodo':
-		all_parquet_fnames = glob.glob(os.path.join(path_parquet_files, '*.parquet'))
-	else:  # if TNS or SIMBAD
-		all_parquet_fnames = glob.glob(os.path.join(path_parquet_files,
-											  '*{}*.parquet'.format(which_data)))
-	if nb_files:
-		all_parquet_fnames = all_parquet_fnames[:nb_files]
-
-	logging.info('Loading parquet files')
-	all_obj_df = pd.concat([pd.read_parquet(parquet_fname) for parquet_fname in all_parquet_fnames])
-	if object_list:
-		all_obj_df = all_obj_df[all_obj_df.objectId.isin(object_list)]
-
-	# Get length of alerts history per alert
-	all_obj_df['length'] = all_obj_df['cjd'].apply(lambda x: len(x))
-
-	if keep_only_one_per_object:
-		# Keep only row with all alerts (not used anymore here, but left to see if it is worth using after extracting feat)
-		all_obj_df.sort_values(['objectId', 'length'], inplace = True)
-		names = np.array(all_obj_df['objectId'])
-		mask = np.append((names[:-1] != names[1:]), True)
-		all_obj_df = all_obj_df[mask]
-
-	# Drop all rows with less points than needed for the fit
-	all_obj_df = all_obj_df[all_obj_df.length >= min_points_fit]
-
-	# Drop duplicates
-	all_obj_df.drop_duplicates(subset = 'candid', inplace = True)
-
-	# Rename column
-	all_obj_df.rename(columns = {'TNS': 'type',
-								  'cdsxmatch': 'type'}, inplace = True)
-
-	if alert_list:
-		all_obj_df = all_obj_df[all_obj_df.candid.isin(alert_list)]
-
-	logging.info('All zenodo files loaded')
-
-	return all_obj_df
 
 
 def load_tdes_ztf(min_points_fit = 5, object_list = None, alert_list = None):
@@ -142,7 +78,8 @@ def load_tdes_ztf(min_points_fit = 5, object_list = None, alert_list = None):
 def load_extragalatic_data_full_lightcurves(object_list = None, alert_list = None):
 
 	df = pd.read_parquet(os.path.join(Config.DATA_DIR,
-							   'extragal_JUN_JUL_AGO_2020_full_lightcurves.parquet'))
+							   Config.EXTRAGAL_FNAME))
+# 	df = df.head(100)
 
 	df.columns = df.columns.str.lstrip('i:')  # strip prefix
 	if object_list:
@@ -151,30 +88,6 @@ def load_extragalatic_data_full_lightcurves(object_list = None, alert_list = Non
 		df = df[df.candid.isin(alert_list)]
 
 	return df
-
-
-def average_intraday_data(df_intra):
-	"""Average over intraday data points
-
-	 Parameters
-	 ----------
-	 df_intra: pd.DataFrame
-		containing the history of the flux
-		with intraday data
-
-	 Returns
-	 -------
-	 df_average: pd.DataFrame
-		containing only daily data
-	"""
-
-	df_average = df_intra.copy()
-	df_average['MJD'] = df_average['cMJD'].apply(
-		lambda x: np.around(x, decimals=0))
-	df_average = df_average.groupby('MJD').mean()
-	df_average['MJD'] = df_average.index.values
-
-	return df_average
 
 
 def is_sorted(a):
@@ -234,20 +147,16 @@ def get_rising_flags_per_filter(mjd, flux, fluxerr, flt, min_data_points=5, list
 					lc['FLUXCALERR'] = fluxerr_filter
 					lc['MJD'] = mjd[final_flag]
 
-# 					avg_data = average_intraday_data(lc)
-
-					avg_data = lc
-
 					# check if it is rising (lower bound of last alert is larger than the smallest upper bound)
 					# and not yet decreasing (upper bound of last alert is larger than the largest lower bound)
 					sigma_rise_factor = sigma_rise / np.sqrt(2)
 					sigma_decay_factor = sigma_decay / np.sqrt(2)
-					if len(avg_data) > 1:
+					if len(lc) > 1:
 						rising_flag = (
-							  (avg_data['FLUXCAL'].values[-1] - sigma_rise_factor * avg_data['FLUXCALERR'].values[-1]
-						  >np.nanmin(avg_data['FLUXCAL'].values + sigma_rise_factor * avg_data['FLUXCALERR'].values)))
-						decay_flag = ((avg_data['FLUXCAL'].values[-1] + sigma_decay_factor*avg_data['FLUXCALERR'].values[-1])
-						  < np.nanmax(avg_data['FLUXCAL'].values - sigma_decay_factor*avg_data['FLUXCALERR'].values))
+							  (lc['FLUXCAL'].values[-1] - sigma_rise_factor * lc['FLUXCALERR'].values[-1]
+						  >np.nanmin(lc['FLUXCAL'].values + sigma_rise_factor * lc['FLUXCALERR'].values)))
+						decay_flag = ((lc['FLUXCAL'].values[-1] + sigma_decay_factor*lc['FLUXCALERR'].values[-1])
+						  < np.nanmax(lc['FLUXCAL'].values - sigma_decay_factor*lc['FLUXCALERR'].values))
 
 					rising_flags[flt_str] = rising_flag
 					decay_flags[flt_str] = decay_flag
@@ -266,7 +175,7 @@ def get_rising_flags_per_filter(mjd, flux, fluxerr, flt, min_data_points=5, list
 
 
 def plot_lightcurve_and_fit(lc_values, filt_list, values_fit, err_fit, feature,
-							 sigmoid_center_ref, snr_rise_time, snr_amplitude, title = ''):
+							 post_fit_features, title = ''):
 	"""
 	Plot lightcurve in all bands, with the rainbow fit.
 
@@ -322,8 +231,8 @@ rise time: {1:.2f}$\pm$ {5:.2f}  \n\
 temperature: {2:.2f}$\pm$ {6:.2f}\n\
 r_chisq: {3:.2f}'.format(*values_fit[1:], *err_fit[1:]), transform=ax.transAxes)
 
-	plt.text(0.01, 0.6, 'Sigmoid distance: %.2f\nRise Time SNR: %.2f\nAmplitude SNR: %.2f' % (
-		sigmoid_center_ref, snr_rise_time, snr_amplitude), transform=ax.transAxes)
+	plt.text(0.01, 0.6, 'Sigmoid distance: %.2f\nRise Time SNR: %.2f\nAmplitude SNR: %.2f' %
+		  post_fit_features, transform=ax.transAxes)
 
 
 	plt.title(title)
@@ -363,60 +272,103 @@ def get_std_and_snr(lc_values, filt_list, filters = ['g', 'r']):
 	return list(std_dev.values()) + list(snr.values())
 
 
-def extract_features_for_lc(lc_values_unnormalised, feature, min_nb_points_fit = 5, show_plots = False,
-							title_plot = ''):
+def compute_fractional_variability(fluxcal, fluxcalerr):
+
+	# Taken from https://www.mdpi.com/2075-4434/7/2/62
+
+	if np.var(fluxcal, ddof=1) - np.mean(fluxcalerr**2) <= 0:
+		return np.nan
+
+	return np.sqrt(np.var(fluxcal, ddof=1) - np.mean(fluxcalerr**2)) / np.mean(fluxcal)
+
+
+def crop_old_history_and_get_Fvar(lc_values):
+
+	# Crop everything before a certain date (last alert - Config.days_history_lc)
+	mask = lc_values[0] >= (lc_values[0][-1] - Config.days_history_lc)
+
+	if lc_values.shape[1] - sum(mask) <= 1:
+		Fvar = 0
+	else:
+
+		# Pre-history LC
+		prehist_lc = lc_values[:, ~mask]
+		Fvar = compute_fractional_variability(prehist_lc[1], prehist_lc[2])
+
+	return lc_values[:, mask], Fvar
+
+
+def is_lc_on_the_rise(lc_values):
+
+	# Check whether it is rising and not decaying
+	rising_flag, decaying_flag = get_rising_flags_per_filter(*lc_values, list_filters = [1, 2],
+														  sigma_rise = 2)
+	final_flag = any(rising_flag.values()) and not any(decaying_flag.values())
+	return final_flag
+
+
+def get_post_fit_features(lc_values, values_fit, err_fit):
+
+	# Relative distance of the last datapoint to the center of the sigmoid, wrt the rise time
+	sigmoid_center_ref = (lc_values[0, -1] - values_fit[0]) / values_fit[2]
+	# Get values on the uncertainty of the fitted values (i.e. value divided by error)
+	snr_rise_time = values_fit[2] / err_fit[2]
+	snr_amplitude = values_fit[1] / err_fit[1]
+
+	return [sigmoid_center_ref, snr_rise_time, snr_amplitude]
+
+
+def flag_based_on_post_fit_criteria(post_fit_feat, values_fit):
+
+	sigmoid_center_ref, snr_rise_time, snr_amplitude = post_fit_feat
+
+	flag = (sigmoid_center_ref > 0 and sigmoid_center_ref < 8 and
+		 snr_rise_time > 1.5 and snr_amplitude > 1.5 and
+		 values_fit[2] < 100 and  values_fit[3] > 10**4 and values_fit[4] < 100)
+		# rise time, temperature and rchisq  < 100 days, > 10**4K, and < 100 respectively.
+	return flag
+
+
+def extract_features_for_lc(lc_values_unnormalised, feature, min_nb_points_fit = 5,
+							show_plots = False, title_plot = ''):
 	# Create copy
 	lc_values = lc_values_unnormalised.copy()
-# 	# Delete duplicate times
+	# Delete duplicate times
 	lc_values = np.delete(lc_values, np.where(np.diff(lc_values[0]) == 0)[0], axis = 1)
+	# Crop out old history
+	lc_values, Fvar = crop_old_history_and_get_Fvar(lc_values)
 
-	# Check whether it is rising
-	rising_flag, decaying_flag = get_rising_flags_per_filter(*lc_values, list_filters = [1,2], sigma_rise = 2)
-	final_flag = any(rising_flag.values()) and not any(decaying_flag.values())
+	if not (lc_values.shape[1] >= min_nb_points_fit and is_lc_on_the_rise(lc_values)):
+		return list(np.full((19), np.nan))
 
+	# Normalization
+	norm = np.max(lc_values[1])
+	lc_values[1], lc_values[2] = lc_values[1] / norm, lc_values[2] / norm
 
-	if (final_flag) & (lc_values.shape[1] >= min_nb_points_fit):
+	# Convert filter list to g, r, i strings
+	filt_list = np.vectorize(Config.filt_conv.get)(lc_values[3].astype(int))
 
-		# Normalization
-		norm = np.max(lc_values[1])
+	# Fit
+	try:
+		values_fit, err_fit = feature._eval_and_get_errors(t=lc_values[0], m=lc_values[1],
+												  sigma = lc_values[2], band = filt_list)
+		# Get general statistics of lc as features: std_g, std_r, snr_g, snr_r
+		std_and_snr = get_std_and_snr(lc_values, filt_list)
+		# Add postfit features
+		post_fit_feat = get_post_fit_features(lc_values, values_fit, err_fit)
 
-		lc_values[1], lc_values[2] = lc_values[1] / norm, lc_values[2] / norm
-
-		# Convert filter list to g, r, i strings
-		filt_list = np.vectorize(Config.filt_conv.get)(lc_values[3].astype(int))
-
-		# Fit
-		try:
-			values_fit, err_fit = feature._eval_and_get_errors(t=lc_values[0], m=lc_values[1],
-													  sigma = lc_values[2], band = filt_list)
-
-			# Add general statistics of lc as features: std_g, std_r, snr_g, snr_r
-			std_and_snr = get_std_and_snr(lc_values, filt_list)
-			# Save some temporal features of the fit to further filter
-			sigmoid_center_ref = (lc_values[0, -1] - values_fit[0]) / values_fit[2]
-			snr_rise_time = values_fit[2] / err_fit[2]
-			snr_amplitude = values_fit[1] / err_fit[1]
-
-# 			if (sigmoid_center_ref > 8) or (snr_rise_time < 1.5) or (snr_amplitude < 1.5):
-# 				return list(np.full((17), np.nan))
-# 			else:
-
-# 				print(astropy.time.Time(lc_values[0][-1], format='jd').iso)
-# 				print(astropy.time.Time(lc_values[0][-1], format='jd').mjd)
-
-
-		except RuntimeError:
-			values_fit = list(np.full((5), np.nan))
-			err_fit = std_and_snr = list(np.full((4), np.nan))
-			sigmoid_center_ref = snr_rise_time = snr_amplitude = np.nan
+		if flag_based_on_post_fit_criteria(post_fit_feat, values_fit):
+			return list(np.full((19), np.nan))
 
 		# Plot
 		if show_plots:
 			plot_lightcurve_and_fit(lc_values, filt_list, values_fit, err_fit, feature,
-						   sigmoid_center_ref, snr_rise_time, snr_amplitude, title = title_plot)
+						   post_fit_feat, title = title_plot)
 
-		return [norm] + list(values_fit) + list(err_fit) + std_and_snr + [sigmoid_center_ref, snr_rise_time, snr_amplitude]
-	return list(np.full((17), np.nan))
+		return [norm] + list(values_fit) + list(err_fit) + std_and_snr + post_fit_feat + [Fvar, lc_values.shape[1]]
+
+	except RuntimeError:
+		return list(np.full((19), np.nan))
 
 
 def feature_extractor_full_LC_row_df(row_obj, feature, min_nb_points_fit = 5, show_plots = False):
@@ -426,11 +378,7 @@ def feature_extractor_full_LC_row_df(row_obj, feature, min_nb_points_fit = 5, sh
 	trans_type = row_obj.type
 	alertid = row_obj.candid
 
-	# Convert from filter string to FID value, before creating np array
-	inverse_filt_conv = {v: k for k, v in Config.filt_conv.items()}
-	row_obj['FLT'] = np.vectorize(inverse_filt_conv.get)(row_obj.FLT.astype(str))
-
-	full_lc_values = np.stack(row_obj[['jd', 'FLUXCAL', 'FLUXCALERR', 'FLT']])
+	full_lc_values = np.stack(row_obj[['jd', 'FLUXCAL', 'FLUXCALERR', 'fid']])
 
 	# Delete duplicate times
 	full_lc_values = np.delete(full_lc_values, np.where(np.diff(full_lc_values[0]) == 0)[0], axis = 1)
@@ -440,18 +388,17 @@ def feature_extractor_full_LC_row_df(row_obj, feature, min_nb_points_fit = 5, sh
 
 	# Iterate over full lightcurve (from the end) until filter flags are passed.
 	lc_values_cropped = full_lc_values
-
 	for i in range(full_lc_values.shape[1] - min_nb_points_fit + 1):
 
-		output_fit = extract_features_for_lc(lc_values_cropped, feature, min_nb_points_fit, show_plots,
+		out_feat = extract_features_for_lc(lc_values_cropped, feature, min_nb_points_fit, show_plots,
 							title_plot = 'objectId: %s. Transient type: %s. ' %(name, trans_type))
 
-		if np.isnan(output_fit[1]):
+		if np.isnan(out_feat[1]):
 			# Remove last alert for next iteration
 			lc_values_cropped = lc_values_cropped[:, :-1]
 		else:
-			return [name, alertid[len(lc_values_cropped) - 1], trans_type, len(lc_values_cropped[1])] + output_fit
-	return [name, alertid, trans_type] + list(np.full((18), np.nan))
+			return [name, alertid[out_feat[-1] - 1], trans_type] + out_feat
+	return [name, alertid[-1], trans_type] + list(np.full((19), np.nan))
 
 
 def feature_extractor_for_row_df(row_obj, feature, flux_conv_required = True,
@@ -481,62 +428,12 @@ def feature_extractor_for_row_df(row_obj, feature, flux_conv_required = True,
 	trans_type = row_obj.type
 	alertid = row_obj.candid
 
-	if flux_conv_required:
-		lc_values = np.stack(row_obj[['cjd', 'cmagpsf', 'csigmapsf', 'cfid']])
-		# Remove alerts with nan values
-		lc_values = lc_values[:, ~np.isnan(lc_values).any(axis=0)]
-		# Flux conversion
-		lc_values[1], lc_values[2] = mag2fluxcal_snana(lc_values[1], lc_values[2])
-	else:
-		lc_values = np.stack(row_obj[['cMJD', 'cFLUXCAL', 'cFLUXCALERR', 'cFLT']])
+	lc_values = np.stack(row_obj[['cMJD', 'cFLUXCAL', 'cFLUXCALERR', 'cFLT']])
 
-	# Delete duplicate times
-	lc_values = np.delete(lc_values, np.where(np.diff(lc_values[0]) == 0)[0], axis = 1)
+	out_feat = extract_features_for_lc(lc_values, feature, min_nb_points_fit, show_plots,
+						title_plot = 'objectId: %s. Transient type: %s. ' %(name, trans_type))
 
-	# Check whether it is rising
-	rising_flag, decaying_flag = get_rising_flags_per_filter(*lc_values, list_filters = [1, 2], sigma_rise = 2)
-	final_flag = any(rising_flag.values()) and not any(decaying_flag.values())
-
-	if (final_flag) & (lc_values.shape[1] >= min_nb_points_fit):
-
-		# Normalization
-		norm = np.max(lc_values[1])
-		lc_values[1], lc_values[2] = lc_values[1] / norm, lc_values[2] / norm
-
-		# Convert filter list to g, r, i strings
-		filt_list = np.vectorize(Config.filt_conv.get)(lc_values[3].astype(int))
-
-		# Fit
-		try:
-			values_fit, err_fit = feature._eval_and_get_errors(t=lc_values[0], m=lc_values[1],
-													  sigma = lc_values[2], band = filt_list)
-		except RuntimeError:
-			values_fit = list(np.full((5), np.nan))
-			err_fit = list(np.full((4), np.nan))
-
-		# Add general statistics of lc as features: std_g, std_r, snr_g, snr_r
-		std_and_snr = get_std_and_snr(lc_values, filt_list)
-
-		# Save some temporal features of the fit to further filter
-		sigmoid_center_ref = (lc_values[0, -1] - values_fit[0]) / values_fit[2]
-		snr_rise_time = values_fit[2] / err_fit[2]
-		snr_amplitude = values_fit[1] / err_fit[1]
-
-		if (sigmoid_center_ref > 8) or (snr_rise_time < 1.5) or (snr_amplitude < 1.5):
-
-			return [name, alertid, trans_type, len(lc_values[1])] + list(np.full((17), np.nan))
-
-		# Plot
-		if show_plots:
-			plot_lightcurve_and_fit(lc_values, filt_list, values_fit, err_fit, feature,sigmoid_center_ref,
-						   snr_rise_time, snr_amplitude,
-							title = 'objectId: %s. Transient type: %s. ' %(name, trans_type))
-
-		return [name, alertid, trans_type,
-				   len(lc_values[1]), norm] + list(values_fit) + list(err_fit) + std_and_snr + [
-					   sigmoid_center_ref, snr_rise_time, snr_amplitude]
-	return [name, alertid, trans_type, len(lc_values[1])] + list(np.full((17), np.nan))
-
+	return [name, alertid, trans_type] + out_feat
 
 
 def keep_only_feat_last_alert_per_object(feature_matrix, input_data):
@@ -616,17 +513,17 @@ def get_final_feature_dataframe_and_save(feature_matrix, input_df, save, keep_on
 	return feature_matrix
 
 
-def extract_feature_extragalactic_obj_full_LC(save = True, show_plots = False, object_list = None,
+def extract_features_non_tdes_extragal(save = True, show_plots = False, object_list = None,
 											   alert_list = None):
 
 	# Initialise
 	feature = RainbowFit.from_angstrom(Config.band_wave_aa, with_baseline = False,
 									temperature='constant', bolometric='sigmoid')
-	columns_feat = ['objId', 'alertId', 'type', 'nb_points', 'norm',
+	columns_feat = ['objId', 'alertId', 'type', 'norm',
 				  'ref_time', 'amplitude', 'rise_time', 'temperature', 'r_chisq',
 					'err_ref_time', 'err_amplitude', 'err_rise_time', 'err_temperature',
 					'std_flux_g', 'std_flux_r', 'std_snr_g', 'std_snr_r',
-					'sigmoid_dist', 'snr_rise_time', 'snr_amplitude']
+					'sigmoid_dist', 'snr_rise_time', 'snr_amplitude', 'Fvar', 'nb_points']
 
 	feature_matrix = pd.DataFrame([], columns = columns_feat)
 
@@ -648,7 +545,7 @@ def extract_feature_extragalactic_obj_full_LC(save = True, show_plots = False, o
 	return feature_matrix
 
 
-def extract_features_tdes(save = True, show_plots = False, keep_only_last_alert = False,
+def extract_features_tdes(save = True, show_plots = False, keep_only_last_alert = True,
 						  object_list = None, alert_list = None):
 	"""
 	Extract features (with rainbow) for TDEs from ZTF, from lightcurves (one lightcurve per alert)
@@ -669,11 +566,11 @@ def extract_features_tdes(save = True, show_plots = False, keep_only_last_alert 
 	# Initialise
 	feature = RainbowFit.from_angstrom(Config.band_wave_aa, with_baseline = False,
 									temperature='constant', bolometric='sigmoid')
-	columns_feat = ['objId', 'alertId', 'type', 'nb_points', 'norm',
+	columns_feat = ['objId', 'alertId', 'type', 'norm',
 				  'ref_time', 'amplitude', 'rise_time', 'temperature', 'r_chisq',
 					'err_ref_time', 'err_amplitude', 'err_rise_time', 'err_temperature',
 					'std_flux_g', 'std_flux_r', 'std_snr_g', 'std_snr_r',
-					'sigmoid_dist', 'snr_rise_time', 'snr_amplitude']
+					'sigmoid_dist', 'snr_rise_time', 'snr_amplitude', 'Fvar', 'nb_points']
 
 	feature_matrix = pd.DataFrame([], columns = columns_feat)
 
@@ -692,56 +589,7 @@ def extract_features_tdes(save = True, show_plots = False, keep_only_last_alert 
 	return feature_matrix
 
 
-def extract_features_nontdes_zenodo(which_data, save = True, nb_files = None, show_plots = False,
-									keep_only_last_alert = False, object_list = None,
-									alert_list = None):
-	"""
-	Extract features (with rainbow) for non-TDE objects from Zenodo dataset (one LC per alert)
-
-
-	Parameters
-	----------
-	which_data : str
-		Whether to load 'simbad', 'tns' or 'all_zenodo' parquet files.
-	save : bool, optional
-		whether to save into csv file. The default is True.
-	nb_files : int, optional
-		Maximum number of parquet files to load. If None (by default), all files are taken.
-	keep_only_last_alert : bool, optional
-		Keep only last alert that passed the cuts per object. The default is False.
-
-	Returns
-	-------
-	feature_matrix : pd.DataFrame
-		Rainbow features extracted.
-
-	"""
-
-	# Initialise
-	feature = RainbowFit.from_angstrom(Config.band_wave_aa, with_baseline = False,
-									temperature='constant', bolometric='sigmoid')
-	columns_feat = ['objId', 'alertId', 'type', 'nb_points', 'norm',
-				  'ref_time', 'amplitude', 'rise_time', 'temperature', 'r_chisq',
-					'err_ref_time', 'err_amplitude', 'err_rise_time', 'err_temperature',
-					'std_flux_g', 'std_flux_r', 'std_snr_g', 'std_snr_r']
-	feature_matrix = pd.DataFrame([], columns = columns_feat)
-
-	# Load
-	zenodo_data = load_zenodo_data(which_data, nb_files = nb_files, object_list = object_list,
-								alert_list = alert_list)
-
-	# Get features
-	feature_matrix[columns_feat] = zenodo_data.apply(
-		lambda x: feature_extractor_for_row_df(x, feature, show_plots = show_plots),
-												result_type = 'expand', axis = 1)
-	feature_matrix.dropna(inplace = True)
-	feature_matrix['data_origin'] = which_data
-	feature_matrix = get_final_feature_dataframe_and_save(feature_matrix, zenodo_data, save,
-													   keep_only_last_alert, which_data)
-	return feature_matrix
-
-
-def extract_features(data_origin, max_nb_files_simbad = None, **kwargs):
+def extract_features(data_origin, **kwargs):
 	"""
 	Main function to extract the features.
 
@@ -755,17 +603,16 @@ def extract_features(data_origin, max_nb_files_simbad = None, **kwargs):
 
 	if data_origin == 'tdes_ztf':
 		return extract_features_tdes(**kwargs)
-	elif data_origin in ['simbad', 'tns']:
-		return extract_features_nontdes_zenodo(data_origin, nb_files = max_nb_files_simbad, **kwargs)
+	elif data_origin == 'extragal':
+		return extract_features_non_tdes_extragal(**kwargs)
 	elif data_origin == 'all':
 		feat_tdes = extract_features_tdes(**kwargs)
-		feat_simbad = extract_features_nontdes_zenodo('simbad', nb_files = max_nb_files_simbad, **kwargs)
-		feat_tns = extract_features_nontdes_zenodo('tns', **kwargs)
+		feat_extragal = extract_features_non_tdes_extragal(**kwargs)
 
 		# Merge and save features
-		all_features = pd.concat([feat_tdes, feat_simbad, feat_tns])
+		all_features = pd.concat([feat_tdes, feat_extragal])
 		if "save" in kwargs:
-			all_features.to_csv(os.path.join(
+ 			all_features.to_csv(os.path.join(
 				Config.OUT_FEATURES_DIR, 'features_all.csv'), index = False)
 		return all_features
 	else:
@@ -776,14 +623,6 @@ if __name__ == '__main__':
 
 	start = dt.datetime.now()
 
-# 	extract_features('all', max_nb_files_simbad = 2, keep_only_last_alert=True, save = True,
-# 				   show_plots = False)
-# 	feat_tde = extract_features('tdes_ztf', keep_only_last_alert=True, save = True, show_plots = False)
-
-	feat_extragal = extract_feature_extragalactic_obj_full_LC(save = True, show_plots = False)
-
-
-
-
+	extract_features('all', save = True, show_plots = False)
 
 	logging .info("Done in {} seconds.".format(dt.datetime.now() - start))

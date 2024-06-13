@@ -87,28 +87,14 @@ alert_list = ['1308229225515015006',
  '1265264683815015002',
  '1333334823615015003']
 
-object_list = ['ZTF20abeeyre',
- 'ZTF18abjrdzb',
- 'ZTF18abbughe',
- 'ZTF20ableiem',
- 'ZTF18abbydps',
- 'ZTF18abummhd',
- 'ZTF20abgoocl',
- 'ZTF18abeggmn',
- 'ZTF20ablnjvp',
- 'ZTF20abvowvw',
- 'ZTF20abhzgly',
- 'ZTF18abascpl',
- 'ZTF20abgwfek',
- 'ZTF19abycxax',
- 'ZTF20abekhef',
- 'ZTF18abtjptp',
- 'ZTF20abpvolc',
+
+object_list = ['ZTF19abuwgfg',
  'ZTF20acitpfz',
- 'ZTF17aaaxbrw',
- 'ZTF20abixkpg',
- 'ZTF20abjardi']
-object_list = ['ZTF17aaazdba']
+ 'ZTF20abejvpr',
+ 'ZTF19aarioci',
+ 'ZTF20abfehpe',
+ 'ZTF20abmzfql',
+ 'ZTF20abgfekk']
 
 feat = extract_features.extract_features('tdes_ztf', keep_only_last_alert=True,
 								  save = False, show_plots = True, object_list = object_list)
@@ -116,7 +102,8 @@ feat = extract_features.extract_feature_extragalactic_obj_full_LC(save = False, 
 																  object_list = object_list)
 
 
-
+# feat = extract_features.extract_features('tdes_ztf', keep_only_last_alert=True,
+# 								  save = False, show_plots = True)
 
 
 
