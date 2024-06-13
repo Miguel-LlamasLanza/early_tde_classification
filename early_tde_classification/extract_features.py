@@ -232,7 +232,7 @@ temperature: {2:.2f}$\pm$ {6:.2f}\n\
 r_chisq: {3:.2f}'.format(*values_fit[1:], *err_fit[1:]), transform=ax.transAxes)
 
 	plt.text(0.01, 0.6, 'Sigmoid distance: %.2f\nRise Time SNR: %.2f\nAmplitude SNR: %.2f' %
-		  post_fit_features, transform=ax.transAxes)
+		  (*post_fit_features,), transform=ax.transAxes)
 
 
 	plt.title(title)
@@ -322,15 +322,17 @@ def flag_based_on_post_fit_criteria(post_fit_feat, values_fit):
 
 	sigmoid_center_ref, snr_rise_time, snr_amplitude = post_fit_feat
 
-	flag = (sigmoid_center_ref > 0 and sigmoid_center_ref < 8 and
-		 snr_rise_time > 1.5 and snr_amplitude > 1.5 and
-		 values_fit[2] < 100 and  values_fit[3] > 10**4 and values_fit[4] < 100)
+	flag = (sigmoid_center_ref > 0 and sigmoid_center_ref < 8
+		 and snr_rise_time > 1.5 and snr_amplitude > 1.5
+		 and values_fit[1] < 9.9999 and values_fit[2] < 1e2
+		 and values_fit[3] > 1e4 and values_fit[4] < 1e2)
 		# rise time, temperature and rchisq  < 100 days, > 10**4K, and < 100 respectively.
+
 	return flag
 
 
 def extract_features_for_lc(lc_values_unnormalised, feature, min_nb_points_fit = 5,
-							show_plots = False, title_plot = ''):
+							show_plots = False, title_plot = '', post_fit_cuts = True):
 	# Create copy
 	lc_values = lc_values_unnormalised.copy()
 	# Delete duplicate times
@@ -357,7 +359,7 @@ def extract_features_for_lc(lc_values_unnormalised, feature, min_nb_points_fit =
 		# Add postfit features
 		post_fit_feat = get_post_fit_features(lc_values, values_fit, err_fit)
 
-		if flag_based_on_post_fit_criteria(post_fit_feat, values_fit):
+		if post_fit_cuts and not flag_based_on_post_fit_criteria(post_fit_feat, values_fit):
 			return list(np.full((19), np.nan))
 
 		# Plot
@@ -616,7 +618,7 @@ def extract_features(data_origin, **kwargs):
 				Config.OUT_FEATURES_DIR, 'features_all.csv'), index = False)
 		return all_features
 	else:
-		print('Wrong string given as data origin. Must be "simbad", "tns", "tdes_ztf" or "all"')
+		print('Wrong string given as data origin. Must be "extragal", "tdes_ztf" or "all"')
 
 
 if __name__ == '__main__':

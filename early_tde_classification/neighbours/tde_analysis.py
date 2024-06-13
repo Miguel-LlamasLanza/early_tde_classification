@@ -14,16 +14,16 @@ golden = ['ZTF17aaazdba','ZTF19aabbnzo',
 
 
 def get_data(path, cuts=True):
-    
-    data = pd.read_csv(path)
+
+    data = pd.read_csv(path, dtype={'alertId': str})
     data = data.replace(-999., -1)
-    
+
     # Remove the duplicate TDE
     data = data[~((data.objId.isin(['ZTF20abfcszi'])) & (data.data_origin == 'extragal'))]
-    
+
     # Keep only the golden sample for TDE
     data = data[(data['objId'].isin(golden)) | (data['type']!='TDE')]
-    
+
     if cuts:
         cuts = (data['temperature'] > 1e4) &\
         (data['rise_time'] < 1e2) &\
@@ -31,14 +31,13 @@ def get_data(path, cuts=True):
         (data['snr_rise_time'] > 1.5) &\
         (data['snr_amplitude'] > 1.5) &\
         (data['r_chisq'] < 1e2) &\
-        (data['snr_rise_time'] > 1) &\
         (data['sigmoid_dist'] < 8) &\
         (data['sigmoid_dist'] > 0)
 
         data = data[cuts]
 
     data.reset_index(inplace=True, drop=True)
-    
+
     to_drop = {'objId', 'alertId', 'type', 'data_origin','ref_time', 'err_ref_time',
        'err_amplitude', 'err_rise_time', 'err_temperature'}
 
@@ -52,9 +51,9 @@ def get_data(path, cuts=True):
 
 
 def run_KDE(data, features, n=5):
-    
+
     tdes = data[data['type'] == 'TDE'].index
-    tree = KDTree(features)              
+    tree = KDTree(features)
     dist, ind = tree.query(features[tdes], k=n)
     dist = dist[:, 1:]
     ind = ind[:, 1:]
@@ -63,18 +62,18 @@ def run_KDE(data, features, n=5):
     alertids = np.array([data.iloc[k]['alertId'].values for k in [i for i in ind]])
     types = np.array([data.iloc[k]['type'].values for k in [i for i in ind]])
     is_TDE = [np.in1d(TDE, tdes) for TDE in ind]
-    
+
     return types, objids, alertids, is_TDE
 
 def plot_distributions(data, types, n=10):
-    
+
     new_dist = np.array(Counter(types.flatten()).most_common())
     distribution = np.array(Counter(data['type']).most_common())
     newtypes = np.in1d(distribution[:, 0], new_dist[:, 0])
-    
+
     print('Neighbours of the TDEs:')
     print(new_dist)
-    
+
     dist_plot_val = 100 * np.array(distribution[:, 1][newtypes], dtype='i') / len(data['type'])
     dist_plot_names = distribution[:, 0][newtypes]
     original = [dist_plot_val, dist_plot_names, "Original distribution"]
