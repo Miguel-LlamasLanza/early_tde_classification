@@ -2,6 +2,9 @@
 
 Project containing the first steps on the TDE early photometric classification to be used within FINK, for ZTF and LSST data.
 
+### About this branch
+Branch containing the latest state of the pipeline using zenodo data (before meeting on April 2024). Each alert on zenodo data only contains infomation on the lst 30 days. After April 2024, we switched to using full lightcurves, so this branch stays as an archival branch.  
+
 ## Installation
 
 Git clone this directory
