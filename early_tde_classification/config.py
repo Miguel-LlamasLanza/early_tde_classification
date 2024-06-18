@@ -28,6 +28,13 @@ class Config:
 	filt_conv = {1: "g", 2: "r", 3: "i"}  # Conversion between filter ID (int) and filter name (str)
 	band_wave_aa = {"g": 4770.0, "r": 6231.0, "i": 7625.0}  # Bands in amstrong for rainbow
 
-	# Parameters
+	# PARAMETERS
 	days_history_lc = 100
+	# Postfit cuts
+	min_snr_features = 1.5
+	min_temp = 1e4
+	max_rchisq = 1e2
+	max_risetime = 1e2
+	max_ampl = 9.9999
+	sigdist_lim = [0, 8]   # Sigmoid center distance limits.
 

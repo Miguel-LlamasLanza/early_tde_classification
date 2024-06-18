@@ -321,11 +321,11 @@ def get_post_fit_features(lc_values, values_fit, err_fit):
 def flag_based_on_post_fit_criteria(post_fit_feat, values_fit):
 
 	sigmoid_center_ref, snr_rise_time, snr_amplitude = post_fit_feat
-
-	flag = (sigmoid_center_ref > 0 and sigmoid_center_ref < 8
-		 and snr_rise_time > 1.5 and snr_amplitude > 1.5
-		 and values_fit[1] < 9.9999 and values_fit[2] < 1e2
-		 and values_fit[3] > 1e4 and values_fit[4] < 1e2)
+	# TODO: Put parameters in config file!!
+	flag = (sigmoid_center_ref > Config.sigdist_lim[0] and sigmoid_center_ref < Config.sigdist_lim[1]
+		 and snr_rise_time > Config.min_snr_features and snr_amplitude > Config.min_snr_features
+		 and values_fit[1] < Config.max_ampl and values_fit[2] < Config.max_risetime
+		 and values_fit[3] > Config.min_temp and values_fit[4] < Config.max_rchisq)
 		# rise time, temperature and rchisq  < 100 days, > 10**4K, and < 100 respectively.
 
 	return flag
