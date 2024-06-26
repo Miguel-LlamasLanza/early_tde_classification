@@ -9,6 +9,8 @@ Script to check LCs and fits for a given set of objects
 """
 
 from early_tde_classification import extract_features
+from early_tde_classification.config import Config
+import os
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -96,13 +98,12 @@ alert_list = ['1308229225515015006',
 #  'ZTF20abmzfql',
 #  'ZTF20abgfekk']
 
-fname = '/home/lmiguel/gitlab_projects/TDE classification/tde_classification/\
-early_tde_classification/neighbours/tde_candidates.csv'
-df = pd.read_csv(fname)
+
+df = pd.read_csv(os.path.join(Config.OUT_RF_CLASSIFIER, 'tde_candidates.csv'))
 
 object_list = df.objId.tolist()
 
-object_list=['ZTF18acxfcda', 'ZTF17aaazdba']
+# object_list=['ZTF18acxfcda', 'ZTF17aaazdba']
 
 
 # feat = extract_features.extract_features('tdes_ztf', keep_only_last_alert=True,
@@ -110,9 +111,8 @@ object_list=['ZTF18acxfcda', 'ZTF17aaazdba']
 
 
 
-# feat = extract_features.extract_features('extragal', object_list = object_list,
-# 								  save = False, show_plots = True)
-
-feat = extract_features.extract_features('tdes_ztf', keep_only_last_alert=True,
+feat = extract_features.extract_features('extragal', object_list = object_list,
 								  save = False, show_plots = True)
+
+
 
