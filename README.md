@@ -28,10 +28,12 @@ You might need to install other packages such as `matplotlib` or `pandas`.
 
 ## Usage
 
-First, **update the config.py file** to match your preference. You need to update the paths.
+Firstly, you may **update the config.py file** to match your preference.
+It is important to add the [non-tde data from Fink](https://box.in2p3.fr/s/A6jpApsGdniEzrY) to the data input directory.
 
 The features can be extracted using the extract\_features.py script, where you can manually specify on which data you want to perform the feature extraction.
 The features should be merged into the features_all.csv file. The script merge\_csvs.py can also be used to put all the extracted features in the same csv.
 
-Then, you can use the **python script** snad_aad.py in the anomaly detection folder, in order to run the SNAD\_AAD method on the extracted features.
+(currently unused) Then, you can use the python script snad_aad.py in the anomaly detection folder, in order to run the SNAD\_AAD method on the extracted features.
+Currently (June 2024), we are using the **Random Forest classifier**, inside the RF_classifier folder.
 
