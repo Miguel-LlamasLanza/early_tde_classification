@@ -88,22 +88,31 @@ alert_list = ['1308229225515015006',
  '1333334823615015003']
 
 
-object_list = ['ZTF19abuwgfg',
- 'ZTF20acitpfz',
- 'ZTF20abejvpr',
- 'ZTF19aarioci',
- 'ZTF20abfehpe',
- 'ZTF20abmzfql',
- 'ZTF20abgfekk']
+# object_list = ['ZTF19abuwgfg',
+#  'ZTF20acitpfz',
+#  'ZTF20abejvpr',
+#  'ZTF19aarioci',
+#  'ZTF20abfehpe',
+#  'ZTF20abmzfql',
+#  'ZTF20abgfekk']
 
-feat = extract_features.extract_features('tdes_ztf', keep_only_last_alert=True,
-								  save = False, show_plots = True, object_list = object_list)
-feat = extract_features.extract_feature_extragalactic_obj_full_LC(save = False, show_plots = True,
-																  object_list = object_list)
+fname = '/home/lmiguel/gitlab_projects/TDE classification/tde_classification/\
+early_tde_classification/neighbours/tde_candidates.csv'
+df = pd.read_csv(fname)
+
+object_list = df.objId.tolist()
+
+object_list=['ZTF18acxfcda', 'ZTF17aaazdba']
 
 
 # feat = extract_features.extract_features('tdes_ztf', keep_only_last_alert=True,
+# 								  save = False, show_plots = True, object_list = object_list)
+
+
+
+# feat = extract_features.extract_features('extragal', object_list = object_list,
 # 								  save = False, show_plots = True)
 
-
+feat = extract_features.extract_features('tdes_ztf', keep_only_last_alert=True,
+								  save = False, show_plots = True)
 

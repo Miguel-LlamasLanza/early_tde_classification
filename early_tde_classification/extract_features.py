@@ -46,7 +46,7 @@ def load_tdes_ztf(min_points_fit = 5, object_list = None, alert_list = None):
 
 	"""
 
-	df = pd.read_csv(os.path.join(Config.ZTF_TDE_DATA_DIR, 'all_tde_in_ztf.csv'), dtype={'id': str})
+	df = pd.read_csv(os.path.join(Config.INPUT_DIR, 'all_tde_in_ztf.csv'), dtype={'id': str})
 	df['type'] = 'TDE'
 	df.drop(columns = 'id', inplace=True)
 
@@ -77,7 +77,7 @@ def load_tdes_ztf(min_points_fit = 5, object_list = None, alert_list = None):
 
 def load_extragalatic_data_full_lightcurves(object_list = None, alert_list = None):
 
-	df = pd.read_parquet(os.path.join(Config.DATA_DIR,
+	df = pd.read_parquet(os.path.join(Config.INPUT_DIR,
 							   Config.EXTRAGAL_FNAME))
 # 	df = df.head(100)
 
@@ -321,12 +321,11 @@ def get_post_fit_features(lc_values, values_fit, err_fit):
 def flag_based_on_post_fit_criteria(post_fit_feat, values_fit):
 
 	sigmoid_center_ref, snr_rise_time, snr_amplitude = post_fit_feat
-	# TODO: Put parameters in config file!!
 	flag = (sigmoid_center_ref > Config.sigdist_lim[0] and sigmoid_center_ref < Config.sigdist_lim[1]
-		 and snr_rise_time > Config.min_snr_features and snr_amplitude > Config.min_snr_features
-		 and values_fit[1] < Config.max_ampl and values_fit[2] < Config.max_risetime
-		 and values_fit[3] > Config.min_temp and values_fit[4] < Config.max_rchisq)
-		# rise time, temperature and rchisq  < 100 days, > 10**4K, and < 100 respectively.
+		and snr_rise_time > Config.min_snr_features and snr_amplitude > Config.min_snr_features
+		and values_fit[1] < Config.max_ampl and values_fit[2] < Config.max_risetime
+		and values_fit[3] > Config.min_temp and values_fit[4] < Config.max_rchisq)
+		# rise time, temperature and rchisq, respectively < 100 days, > 10**4K, and < 10.
 
 	return flag
 
@@ -496,16 +495,16 @@ def get_final_feature_dataframe_and_save(feature_matrix, input_df, save, keep_on
 
 	if save:
 		# Save all features
-		os.makedirs(os.path.join(Config.OUT_FEATURES_DIR, 'all_alerts_per_object'), exist_ok = True)
-		feature_matrix.to_csv(os.path.join(Config.OUT_FEATURES_DIR, 'all_alerts_per_object',
+		os.makedirs(os.path.join(Config.OUT_FEATURES_DIR, 'all_alerts_per_tde'), exist_ok = True)
+		feature_matrix.to_csv(os.path.join(Config.OUT_FEATURES_DIR, 'all_alerts_per_tde',
 									 'features_tdes_ztf.csv'), index = False)
 
 	if keep_only_last_alert:
 		# Keep only last alert that passed the cut per object
 		feature_matrix = keep_only_feat_last_alert_per_object(feature_matrix, input_df)
 		if save:
-			os.makedirs(os.path.join(Config.OUT_FEATURES_DIR, 'one_alert_per_object'), exist_ok = True)
-			feature_matrix.to_csv(os.path.join(Config.OUT_FEATURES_DIR, 'one_alert_per_object',
+			os.makedirs(os.path.join(Config.OUT_FEATURES_DIR, 'one_alert_per_tde'), exist_ok = True)
+			feature_matrix.to_csv(os.path.join(Config.OUT_FEATURES_DIR, 'one_alert_per_tde',
 									 'features_tdes_ztf.csv'), index = False)
 
 	# Save features into csv in general folder
@@ -517,6 +516,8 @@ def get_final_feature_dataframe_and_save(feature_matrix, input_df, save, keep_on
 
 def extract_features_non_tdes_extragal(save = True, show_plots = False, object_list = None,
 											   alert_list = None):
+
+
 
 	# Initialise
 	feature = RainbowFit.from_angstrom(Config.band_wave_aa, with_baseline = False,
