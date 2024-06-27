@@ -323,7 +323,8 @@ def flag_based_on_post_fit_criteria(post_fit_feat, values_fit):
 	sigmoid_center_ref, snr_rise_time, snr_amplitude = post_fit_feat
 	flag = (sigmoid_center_ref > Config.sigdist_lim[0] and sigmoid_center_ref < Config.sigdist_lim[1]
 		and snr_rise_time > Config.min_snr_features and snr_amplitude > Config.min_snr_features
-		and values_fit[1] < Config.max_ampl #and values_fit[2] < Config.max_risetime
+		#and values_fit[1] < Config.max_ampl
+		and values_fit[2] < Config.max_risetime
 		# and values_fit[3] > Config.min_temp
 		and values_fit[4] < Config.max_rchisq)
 		# rise time, temperature and rchisq, respectively < 100 days, > 10**4K, and < 10.
@@ -362,6 +363,10 @@ def extract_features_for_lc(lc_values_unnormalised, feature, min_nb_points_fit =
 		std_and_snr = get_std_and_snr(lc_values, filt_list)
 		# Add postfit features
 		post_fit_feat = get_post_fit_features(lc_values, values_fit, err_fit)
+
+# 		if show_plots:
+# 			plot_lightcurve_and_fit(lc_values, filt_list, values_fit, err_fit, feature,
+# 						   post_fit_feat, title = title_plot)
 
 		if post_fit_cuts and not flag_based_on_post_fit_criteria(post_fit_feat, values_fit):
 			return list(np.full((19), np.nan))

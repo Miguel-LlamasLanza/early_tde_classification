@@ -112,8 +112,8 @@ object_list = df.objId.tolist()
 # feat = extract_features.extract_features('tdes_ztf', keep_only_last_alert=True,
 # 								  save = False, show_plots = True, object_list = object_list)
 
-#object_list=['ZTF22aafujzv', 'ZTF22aadesap', 'ZTF18aabdajx', 'ZTF18aabdajx']
-#object_list = object_list[0:1]
+# object_list=['ZTF22aafujzv', 'ZTF22aadesap', 'ZTF18aabdajx']
+# object_list = object_list[2:3]
 
 feat = extract_features.extract_features('extragal', object_list = object_list,
 								  save = False, show_plots = True)
