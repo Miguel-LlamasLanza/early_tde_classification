@@ -8,20 +8,20 @@ Created on Wed Mar 20 12:30:15 2024
 
 import pandas as pd
 import os
-import glob
+# import glob
 import logging
 import numpy as np
-import math
+# import math
 import matplotlib.pyplot as plt
 import datetime as dt
-import astropy
+# import astropy
 
 try:
-	from early_tde_classification.conversion_tools import mag2fluxcal_snana, add_alert_history_to_df
+	from early_tde_classification.conversion_tools import add_alert_history_to_df
 	from early_tde_classification.config import Config
 
 except ModuleNotFoundError:
-	from conversion_tools import mag2fluxcal_snana, add_alert_history_to_df
+	from conversion_tools import add_alert_history_to_df
 	from config import Config
 
 
@@ -323,8 +323,9 @@ def flag_based_on_post_fit_criteria(post_fit_feat, values_fit):
 	sigmoid_center_ref, snr_rise_time, snr_amplitude = post_fit_feat
 	flag = (sigmoid_center_ref > Config.sigdist_lim[0] and sigmoid_center_ref < Config.sigdist_lim[1]
 		and snr_rise_time > Config.min_snr_features and snr_amplitude > Config.min_snr_features
-		and values_fit[1] < Config.max_ampl and values_fit[2] < Config.max_risetime
-		and values_fit[3] > Config.min_temp and values_fit[4] < Config.max_rchisq)
+		and values_fit[1] < Config.max_ampl #and values_fit[2] < Config.max_risetime
+		# and values_fit[3] > Config.min_temp
+		and values_fit[4] < Config.max_rchisq)
 		# rise time, temperature and rchisq, respectively < 100 days, > 10**4K, and < 10.
 
 	return flag
@@ -339,7 +340,7 @@ def extract_features_for_lc(lc_values_unnormalised, feature, min_nb_points_fit =
 	# Crop out old history
 	lc_values, Fvar = crop_old_history_and_get_Fvar(lc_values)
 
-	if not (lc_values.shape[1] >= min_nb_points_fit and is_lc_on_the_rise(lc_values)):
+	if not (lc_values.shape[1] >= min_nb_points_fit and is_lc_on_the_rise(lc_values)) or Fvar!=0:
 		return list(np.full((19), np.nan))
 
 	# Normalization
@@ -348,6 +349,10 @@ def extract_features_for_lc(lc_values_unnormalised, feature, min_nb_points_fit =
 
 	# Convert filter list to g, r, i strings
 	filt_list = np.vectorize(Config.filt_conv.get)(lc_values[3].astype(int))
+
+# 	from early_tde_classification import extra_tools
+# 	plt.figure()
+# 	extra_tools.plot_lc_from_lc_values_array(lc_values)
 
 	# Fit
 	try:
@@ -365,6 +370,7 @@ def extract_features_for_lc(lc_values_unnormalised, feature, min_nb_points_fit =
 		if show_plots:
 			plot_lightcurve_and_fit(lc_values, filt_list, values_fit, err_fit, feature,
 						   post_fit_feat, title = title_plot)
+
 
 		return [norm] + list(values_fit) + list(err_fit) + std_and_snr + post_fit_feat + [Fvar, lc_values.shape[1]]
 
@@ -626,6 +632,6 @@ if __name__ == '__main__':
 
 	start = dt.datetime.now()
 
-	extract_features('all', save = True, show_plots = False)
+	extract_features('extragal', save = True, show_plots = False)
 
 	logging .info("Done in {} seconds.".format(dt.datetime.now() - start))

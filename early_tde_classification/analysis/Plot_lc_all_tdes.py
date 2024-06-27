@@ -20,7 +20,7 @@ from early_tde_classification.config import Config
 
 
 fink_tdes = pd.read_csv(
-	os.path.join('/home/lmiguel/gitlab_projects/TDE classification/tde_classification/ZTF_TDE_Data/',
+	os.path.join(Config.PROJECT_PATH, '..', 'Archive or backup', 'ZTF_TDE_Data',
 			  'from_Fink.csv'), dtype={'id': str})
 
 fink_tdes.sort_values('jd', inplace = True)
@@ -44,3 +44,4 @@ for obj_id in np.unique(fink_tdes.objectId):
 		plt.errorbar(obj_df['jd'][flt_mask], flux[flt_mask], yerr=fluxerr[flt_mask], fmt='o',
 			   alpha=.7, color=colors[idx], label = flt_str)
 		plt.title(obj_id)
+plt.show()

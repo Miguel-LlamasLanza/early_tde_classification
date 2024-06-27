@@ -99,6 +99,9 @@ alert_list = ['1308229225515015006',
 #  'ZTF20abgfekk']
 
 
+
+
+
 df = pd.read_csv(os.path.join(Config.OUT_RF_CLASSIFIER, 'tde_candidates.csv'))
 
 object_list = df.objId.tolist()
@@ -109,10 +112,11 @@ object_list = df.objId.tolist()
 # feat = extract_features.extract_features('tdes_ztf', keep_only_last_alert=True,
 # 								  save = False, show_plots = True, object_list = object_list)
 
-
+#object_list=['ZTF22aafujzv', 'ZTF22aadesap', 'ZTF18aabdajx', 'ZTF18aabdajx']
+#object_list = object_list[0:1]
 
 feat = extract_features.extract_features('extragal', object_list = object_list,
 								  save = False, show_plots = True)
 
 
-
+plt.show()
