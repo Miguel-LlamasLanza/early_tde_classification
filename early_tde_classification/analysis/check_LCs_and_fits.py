@@ -100,22 +100,59 @@ alert_list = ['1308229225515015006',
 
 
 
-
+"""
 
 df = pd.read_csv(os.path.join(Config.OUT_RF_CLASSIFIER, 'tde_candidates.csv'))
 
 object_list = df.objId.tolist()
 
-# object_list=['ZTF18acxfcda', 'ZTF17aaazdba']
+object_list=['ZTF18acxfcda', 'ZTF17aaazdba']
+object_list=['ZTF17aaazdba',
+'ZTF18actaqdw',
+'ZTF19aabbnzo',
+'ZTF19aapreis',
+'ZTF19aarioci',
+'ZTF19abhhjcc',
+'ZTF19abzrhgq',
+'ZTF19accmaxo',
+'ZTF20abfcszi',
+'ZTF20abjwvae',
+'ZTF20acitpfz',
+'ZTF20acqoiyt']
+# object_list = ['ZTF20acqoiyt']
 
 
-# feat = extract_features.extract_features('tdes_ztf', keep_only_last_alert=True,
-# 								  save = False, show_plots = True, object_list = object_list)
+feat = extract_features.extract_features('tdes_ztf', keep_only_last_alert=True,
+								  save = False, show_plots = True, object_list = object_list)
+"""
+"""
+object_list=['ZTF22aafujzv', 'ZTF22aadesap', 'ZTF18aabdajx']
+object_list = object_list[1:2]
+"""
+object_list = ['ZTF20acpdrkt']
+object_list = ['ZTF18aahvkqm', 'ZTF18abqarng', 'ZTF18accnpjg', 'ZTF20abjwvae',
+       'ZTF22aafmtqf', 'ZTF22aaizrty', 'ZTF24aaimfrw']
+# object_list = None
+# alert_list = ['1976230504115015015',
+#  '1970209504115015012',
+#  '1318213170915015008',
+#  '1303257100915015004',
+#  '1933156230315015007',
+#  '1960189581415015015',
+#  '1550154514015015013',
+#  '1587181494015015013',
+#  '1589245494015015013',
+#  '1328456512815015063',
+#  '2095443192815010020',
+#  '1039363622815015019',
+#  '2801497322815015016',
+#  '2599153412815015009',
+#  '1380423092815015017',
+#  '2680177084215015007',
+#  '2370259740015015001',
+#  '1563269360015015001']
 
-# object_list=['ZTF22aafujzv', 'ZTF22aadesap', 'ZTF18aabdajx']
-# object_list = object_list[2:3]
-
-feat = extract_features.extract_features('extragal', object_list = object_list,
+feat = extract_features.extract_features('extragal', object_list = object_list, alert_list = alert_list,
 								  save = False, show_plots = True)
 
 

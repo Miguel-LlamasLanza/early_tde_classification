@@ -15,6 +15,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import datetime as dt
 # import astropy
+import pickle
 
 try:
 	from early_tde_classification.conversion_tools import add_alert_history_to_df
@@ -79,7 +80,6 @@ def load_extragalatic_data_full_lightcurves(object_list = None, alert_list = Non
 
 	df = pd.read_parquet(os.path.join(Config.INPUT_DIR,
 							   Config.EXTRAGAL_FNAME))
-# 	df = df.head(100)
 
 	df.columns = df.columns.str.lstrip('i:')  # strip prefix
 	if object_list:
@@ -198,11 +198,12 @@ def plot_lightcurve_and_fit(lc_values, filt_list, values_fit, err_fit, feature,
 	mjd, flux, fluxerr, _ = lc_values
 	X = np.linspace(lc_values[0].min() - 10, lc_values[0].max() + 10, 500)
 
-	plt.figure(figsize=(12, 8))
+	fig = plt.figure(figsize=(12, 8))
 	ax = plt.gca()
 
-	ax.set_xlabel('Time (MDJ)')
-	ax.set_ylabel('Normalised flux')
+	ax.set_xlabel('Time (MDJ)', fontsize = 14)
+# 	ax.set_ylabel('Normalised flux', fontsize = 14)
+	ax.set_ylabel('Flux', fontsize = 14)
 
 # 	colors = ['green', 'red', 'black']
 	colors = ['#15284F', '#F5622E']
@@ -214,7 +215,7 @@ def plot_lightcurve_and_fit(lc_values, filt_list, values_fit, err_fit, feature,
 
 		plt.errorbar(mjd[flt_mask], flux[flt_mask], yerr=fluxerr[flt_mask], fmt='o', alpha=.7,
 			   color=colors[idx], label = flt_str)
-		plt.plot(X, rainbow, linewidth=4, color=colors[idx])
+		plt.plot(X, rainbow, linewidth=2, color=colors[idx])
 # 		# Error plots
 		if not np.isnan(err_fit).all():
 			generated_params = np.random.multivariate_normal(values_fit[:-1], np.diag(err_fit)**2, 1000)
@@ -226,17 +227,26 @@ def plot_lightcurve_and_fit(lc_values, filt_list, values_fit, err_fit, feature,
 	# Add text
 
 	plt.text(0.01, 0.8,
-'Amplitude: {0:.2f}$\pm$ {4:.2f}\n\
-rise time: {1:.2f}$\pm$ {5:.2f}  \n\
-temperature: {2:.2f}$\pm$ {6:.2f}\n\
-r_chisq: {3:.2f}'.format(*values_fit[1:], *err_fit[1:]), transform=ax.transAxes)
+				r'Amplitude ($A$)'': {0:.2f}$\pm$ {4:.2f}\n'
+				r'Rise time $\tau$:'' {1:.2f}$\pm$ {5:.2f}  \n'
+				'Temperature ($T$): {2:.2f}$\pm$ {6:.2f}\n'
+				'r_chisq ($\chi^2_r$): ''{3:.2f}'.format(*values_fit[1:], *err_fit[1:]), transform=ax.transAxes)
 
-	plt.text(0.01, 0.6, 'Sigmoid distance: %.2f\nRise Time SNR: %.2f\nAmplitude SNR: %.2f' %
-		  (*post_fit_features,), transform=ax.transAxes)
+	plt.text(0.01, 0.6, r'Sigmoid compression ($\psi$):'
+					  ' %.2f\nRise Time SNR: %.2f\n'
+					  'Amplitude SNR: %.2f\n'
+					  'Temperature SNR : %.2f'
+					   %(*post_fit_features, err_fit[-1]), transform=ax.transAxes)
 
 
-	plt.title(title)
+	plt.title(title, fontsize = 16)
 	plt.legend()
+# 	if len(lc_values[0]) == 17:
+# 		tuple_to_save = (lc_values, filt_list)
+# 		with open('/home/lmiguel/Thesis/generate_plots/tdes/data_lc.pickle', 'wb') as handle:
+# 			pickle.dump(tuple_to_save, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+
 
 
 def get_std_and_snr(lc_values, filt_list, filters = ['g', 'r']):
@@ -324,7 +334,7 @@ def flag_based_on_post_fit_criteria(post_fit_feat, values_fit):
 	flag = (sigmoid_center_ref > Config.sigdist_lim[0] and sigmoid_center_ref < Config.sigdist_lim[1]
 		and snr_rise_time > Config.min_snr_features and snr_amplitude > Config.min_snr_features
 		#and values_fit[1] < Config.max_ampl
-		and values_fit[2] < Config.max_risetime
+# 		and values_fit[2] < Config.max_risetime
 		# and values_fit[3] > Config.min_temp
 		and values_fit[4] < Config.max_rchisq)
 		# rise time, temperature and rchisq, respectively < 100 days, > 10**4K, and < 10.
@@ -344,9 +354,9 @@ def extract_features_for_lc(lc_values_unnormalised, feature, min_nb_points_fit =
 	if not (lc_values.shape[1] >= min_nb_points_fit and is_lc_on_the_rise(lc_values)) or Fvar!=0:
 		return list(np.full((19), np.nan))
 
-	# Normalization
-	norm = np.max(lc_values[1])
-	lc_values[1], lc_values[2] = lc_values[1] / norm, lc_values[2] / norm
+# 	# Normalization
+# 	norm = np.max(lc_values[1])
+# 	lc_values[1], lc_values[2] = lc_values[1] / norm, lc_values[2] / norm
 
 	# Convert filter list to g, r, i strings
 	filt_list = np.vectorize(Config.filt_conv.get)(lc_values[3].astype(int))
@@ -364,12 +374,13 @@ def extract_features_for_lc(lc_values_unnormalised, feature, min_nb_points_fit =
 		# Add postfit features
 		post_fit_feat = get_post_fit_features(lc_values, values_fit, err_fit)
 
-# 		if show_plots:
-# 			plot_lightcurve_and_fit(lc_values, filt_list, values_fit, err_fit, feature,
-# 						   post_fit_feat, title = title_plot)
+		if show_plots:
+			plot_lightcurve_and_fit(lc_values, filt_list, values_fit, err_fit, feature,
+						   post_fit_feat, title = title_plot)
 
 		if post_fit_cuts and not flag_based_on_post_fit_criteria(post_fit_feat, values_fit):
-			return list(np.full((19), np.nan))
+	# 		return list(np.full((19), np.nan))
+			return list(np.full((18), np.nan))
 
 		# Plot
 		if show_plots:
@@ -377,13 +388,18 @@ def extract_features_for_lc(lc_values_unnormalised, feature, min_nb_points_fit =
 						   post_fit_feat, title = title_plot)
 
 
-		return [norm] + list(values_fit) + list(err_fit) + std_and_snr + post_fit_feat + [Fvar, lc_values.shape[1]]
+# 		return [norm] + list(values_fit) + list(err_fit) + std_and_snr + post_fit_feat + [Fvar, lc_values.shape[1]]
+		return list(values_fit) + list(err_fit) + std_and_snr + post_fit_feat + [Fvar, lc_values.shape[1]]
+
 
 	except RuntimeError:
-		return list(np.full((19), np.nan))
+# 		return list(np.full((19), np.nan))
+		return list(np.full((18), np.nan))
 
 
-def feature_extractor_full_LC_row_df(row_obj, feature, min_nb_points_fit = 5, show_plots = False):
+
+def feature_extractor_full_LC_row_df(row_obj, feature, min_nb_points_fit = 5, show_plots = False,
+									 keep_only_last_alert = True):
 	# Only latest alert that passes the cut is saved.
 
 	name = row_obj.objectId
@@ -400,17 +416,39 @@ def feature_extractor_full_LC_row_df(row_obj, feature, min_nb_points_fit = 5, sh
 
 	# Iterate over full lightcurve (from the end) until filter flags are passed.
 	lc_values_cropped = full_lc_values
-	for i in range(full_lc_values.shape[1] - min_nb_points_fit + 1):
 
-		out_feat = extract_features_for_lc(lc_values_cropped, feature, min_nb_points_fit, show_plots,
-							title_plot = 'objectId: %s. Transient type: %s. ' %(name, trans_type))
+	if keep_only_last_alert:  # Default. Only last alert that passes the cuts
 
-		if np.isnan(out_feat[1]):
+		for i in range(full_lc_values.shape[1] - min_nb_points_fit + 1):
+
+			out_feat = extract_features_for_lc(lc_values_cropped, feature, min_nb_points_fit, show_plots,
+								title_plot = 'objectId: %s. Transient type: %s. ' %(name, trans_type))
+
+			if np.isnan(out_feat[1]):
+				# Remove last alert for next iteration
+				lc_values_cropped = lc_values_cropped[:, :-1]
+			else:
+				return [name, alertid[out_feat[-1] - 1], trans_type] + out_feat
+# 		return [name, alertid[-1], trans_type] + list(np.full((19), np.nan))
+		return [name, alertid[-1], trans_type] + list(np.full((18), np.nan))
+
+	else:  # All alerts that pass the cuts are returned
+		out_features_list = []
+		for i in range(full_lc_values.shape[1] - min_nb_points_fit + 1):
+
+			out_feat = extract_features_for_lc(lc_values_cropped, feature, min_nb_points_fit, show_plots,
+								title_plot = 'objectId: %s. Transient type: %s. ' %(name, trans_type))
+# 			if not np.isnan(out_feat[1]):
+			if not np.isnan(out_feat[0]):
+				out_features_list.append([name, alertid[out_feat[-1] - 1], trans_type] + out_feat)
+
 			# Remove last alert for next iteration
 			lc_values_cropped = lc_values_cropped[:, :-1]
 		else:
-			return [name, alertid[out_feat[-1] - 1], trans_type] + out_feat
-	return [name, alertid[-1], trans_type] + list(np.full((19), np.nan))
+# 			out_features_list.append([name, alertid[-1], trans_type] + list(np.full((19), np.nan)))
+			out_features_list.append([name, alertid[-1], trans_type] + list(np.full((18), np.nan)))
+
+		return out_features_list
 
 
 def feature_extractor_for_row_df(row_obj, feature, flux_conv_required = True,
@@ -526,14 +564,12 @@ def get_final_feature_dataframe_and_save(feature_matrix, input_df, save, keep_on
 
 
 def extract_features_non_tdes_extragal(save = True, show_plots = False, object_list = None,
-											   alert_list = None):
-
-
+											   alert_list = None, keep_only_last_alert = True):
 
 	# Initialise
 	feature = RainbowFit.from_angstrom(Config.band_wave_aa, with_baseline = False,
 									temperature='constant', bolometric='sigmoid')
-	columns_feat = ['objId', 'alertId', 'type', 'norm',
+	columns_feat = ['objId', 'alertId', 'type',  # 'norm',
 				  'ref_time', 'amplitude', 'rise_time', 'temperature', 'r_chisq',
 					'err_ref_time', 'err_amplitude', 'err_rise_time', 'err_temperature',
 					'std_flux_g', 'std_flux_r', 'std_snr_g', 'std_snr_r',
@@ -544,11 +580,16 @@ def extract_features_non_tdes_extragal(save = True, show_plots = False, object_l
 	# Load
 	extragal_data = load_extragalatic_data_full_lightcurves(object_list = object_list,
 														 alert_list = alert_list)
-
-	# Get features
-	feature_matrix[columns_feat] = extragal_data.apply(
-		lambda x: feature_extractor_full_LC_row_df(x, feature, show_plots = show_plots),
-									 result_type = 'expand', axis = 1)
+	if keep_only_last_alert:
+		# Get features
+		feature_matrix[columns_feat] = extragal_data.apply(
+			lambda x: feature_extractor_full_LC_row_df(x, feature, show_plots = show_plots),
+										 result_type = 'expand', axis = 1)
+	else:
+		feature_matrix = extract_features_all_alerts_per_object_full_LC_df(extragal_data,
+																	 feature,
+																	 columns_feat,
+																	 show_plots = show_plots)
 	feature_matrix.dropna(inplace = True)
 	feature_matrix['data_origin'] = 'extragal'
 
@@ -557,6 +598,36 @@ def extract_features_non_tdes_extragal(save = True, show_plots = False, object_l
 		feature_matrix.to_csv(os.path.join(Config.OUT_FEATURES_DIR, 'features_extragal.csv'),
 							  index = False)
 	return feature_matrix
+
+
+def extract_features_all_alerts_per_object_full_LC_df(extragal_data, feature,
+													  columns_feat,
+													  show_plots = False):
+
+	result_dfs = []
+
+		# Loop over each row in extragal_data
+	for _, row in extragal_data.iterrows():
+		# Call the feature extraction function
+		results = feature_extractor_full_LC_row_df(row, feature, show_plots=show_plots,
+												keep_only_last_alert = False)
+
+		# Check if the result is a list of lists
+		if isinstance(results, list) and all(isinstance(res, list) for res in results):
+			# If so, convert each list into a DataFrame with columns_feat as columns
+			temp_df = pd.DataFrame(results, columns=columns_feat)
+		else:
+			# Otherwise, assume it's a single list and convert it into a single-row DataFrame
+			temp_df = pd.DataFrame([results], columns=columns_feat)
+
+		# Append the resulting DataFrame to the list
+		result_dfs.append(temp_df)
+	# Concatenate all DataFrames into the final feature matrix
+	feature_matrix = pd.concat(result_dfs, ignore_index=True)
+
+	return feature_matrix
+
+
 
 
 def extract_features_tdes(save = True, show_plots = False, keep_only_last_alert = True,
@@ -580,7 +651,7 @@ def extract_features_tdes(save = True, show_plots = False, keep_only_last_alert 
 	# Initialise
 	feature = RainbowFit.from_angstrom(Config.band_wave_aa, with_baseline = False,
 									temperature='constant', bolometric='sigmoid')
-	columns_feat = ['objId', 'alertId', 'type', 'norm',
+	columns_feat = ['objId', 'alertId', 'type',  # 'norm',
 				  'ref_time', 'amplitude', 'rise_time', 'temperature', 'r_chisq',
 					'err_ref_time', 'err_amplitude', 'err_rise_time', 'err_temperature',
 					'std_flux_g', 'std_flux_r', 'std_snr_g', 'std_snr_r',
@@ -637,6 +708,6 @@ if __name__ == '__main__':
 
 	start = dt.datetime.now()
 
-	extract_features('extragal', save = True, show_plots = False)
+	extract_features('extragal', save = True, show_plots = False, keep_only_last_alert=False)
 
 	logging .info("Done in {} seconds.".format(dt.datetime.now() - start))

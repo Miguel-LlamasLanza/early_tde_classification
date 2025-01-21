@@ -20,7 +20,9 @@ class Config:
 	PROJECT_PATH = dirname(abspath(__file__))
 	DATA_DIR = join(PROJECT_PATH, '..', 'data')
 	INPUT_DIR = join(DATA_DIR, 'input')
-	EXTRAGAL_FNAME = 'full_LCs_extragal_objects_2024.parquet'
+# 	EXTRAGAL_FNAME = 'full_LCs_extragal_objects_2024.parquet'
+	EXTRAGAL_FNAME = 'full_LCs_all_objects.parquet'
+	EXTRAGAL_FNAME = 'full_LCs_all_objects_tns_all.parquet'
 
 	OUTPUT_DIR = join(DATA_DIR, 'output')
 	OUT_FEATURES_DIR = join(OUTPUT_DIR, 'features')
@@ -40,7 +42,7 @@ class Config:
 	min_snr_features = 1.5
 	min_temp = 1e4
 	max_rchisq = 10
-	max_risetime = 1e2
-	max_ampl = 9.9999
+# 	max_risetime = 1e2
+# 	max_ampl = 9.9999
 	sigdist_lim = [0, 8]   # Sigmoid center distance limits.
 

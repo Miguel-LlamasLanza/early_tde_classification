@@ -37,6 +37,7 @@ def get_data(path, object_list = None):
 	data.drop(columns=to_drop, inplace = True)
 	return data, metadata
 
+
 def scatter_and_hist(x_all, y_all, x_tde, y_tde, x_sn, y_sn):
 
 	colors = ['#F5622E', '#15284F']
