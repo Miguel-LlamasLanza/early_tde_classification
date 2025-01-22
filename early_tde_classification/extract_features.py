@@ -8,14 +8,10 @@ Created on Wed Mar 20 12:30:15 2024
 
 import pandas as pd
 import os
-# import glob
 import logging
 import numpy as np
-# import math
 import matplotlib.pyplot as plt
 import datetime as dt
-# import astropy
-import pickle
 
 try:
 	from early_tde_classification.conversion_tools import add_alert_history_to_df
