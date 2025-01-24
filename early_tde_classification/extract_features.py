@@ -14,11 +14,9 @@ import matplotlib.pyplot as plt
 import datetime as dt
 
 try:
-	from early_tde_classification.conversion_tools import add_alert_history_to_df
 	from early_tde_classification.config import Config
 
 except ModuleNotFoundError:
-	from conversion_tools import add_alert_history_to_df
 	from config import Config
 
 
@@ -27,52 +25,23 @@ from light_curve.light_curve_py import RainbowFit
 logging.basicConfig(encoding='utf-8', level=logging.INFO)
 
 
-def load_tdes_ztf(min_points_fit = 5, object_list = None, alert_list = None):
+def load_data_full_lightcurves(object_list = None, alert_list = None):
 	"""
-	Load data from TDEs csv (and format it as required)
+	Load data containing concatenated lightcurves
 
 	Parameters
 	----------
-	min_points_fit : int, optional
-		Min number of datapoints in the LC required for the fit, in all filters. The default is 5.
+	object_list : list of strings, optional
+		List of object IDs to include. The default is None (include all loaded objects).
+	alert_list : list of strings, optional
+		List of alert IDs to include. The default is None (include all loaded alerts).
 
 	Returns
 	-------
-	df : pd.DataFrame
-		Dataset for TDEs.
+	df : pd. DataFrame
+		Dataframe with input data. Each row contains the LC (and other info) for one alert.
 
 	"""
-
-	df = pd.read_csv(os.path.join(Config.INPUT_DIR, 'all_tde_in_ztf.csv'), dtype={'id': str})
-	df['type'] = 'TDE'
-	df.drop(columns = 'id', inplace=True)
-
-	if object_list:
-		df = df[df.objectId.isin(object_list)]
-
-	# Remove outliers
-	df = df[~df.objectId.isin(['ZTF18acpdvos', 'ZTF18aabtxvd', 'ZTF18aahqkbt'])]
-
-	# Convert filter name (str) to filter ID (int)
-	inverse_filt_conv = {v: k for k, v in Config.filt_conv.items()}
-	df['FLT'] = np.vectorize(inverse_filt_conv.get)(df.FLT.astype(str))
-
-	# Add alert history
-	df = add_alert_history_to_df(df)
-
-	# Get lenngth of alerts history per alert
-	df['length'] = df['cMJD'].apply(lambda x: len(x))
-	# Drop all rows with less points than needed for the fit
-	df = df[df['length'] >= min_points_fit]
-	df['candid'] = df['objectId'] + '-' + df['length'].astype(str)
-
-	if alert_list:
-		df = df[df.candid.isin(alert_list)]
-
-	return df
-
-
-def load_extragalatic_data_full_lightcurves(object_list = None, alert_list = None):
 
 	df = pd.read_parquet(os.path.join(Config.INPUT_DIR,
 							   Config.EXTRAGAL_FNAME))
@@ -87,6 +56,10 @@ def load_extragalatic_data_full_lightcurves(object_list = None, alert_list = Non
 
 
 def is_sorted(a):
+	"""
+	Check whether array "a" is sorted. Returns True or False.
+
+	"""
 	return np.all(a[:-1] <= a[1:])
 
 
@@ -194,11 +167,9 @@ def plot_lightcurve_and_fit(lc_values, filt_list, values_fit, err_fit, feature,
 	mjd, flux, fluxerr, _ = lc_values
 	X = np.linspace(lc_values[0].min() - 10, lc_values[0].max() + 10, 500)
 
-	fig = plt.figure(figsize=(12, 8))
-	ax = plt.gca()
+	ax = plt.figure(figsize=(12, 8)).gca()
 
 	ax.set_xlabel('Time (MDJ)', fontsize = 14)
-# 	ax.set_ylabel('Normalised flux', fontsize = 14)
 	ax.set_ylabel('Flux', fontsize = 14)
 
 # 	colors = ['green', 'red', 'black']
@@ -221,7 +192,6 @@ def plot_lightcurve_and_fit(lc_values, filt_list, values_fit, err_fit, feature,
 			plt.fill_between(X, generated_envelope[0], generated_envelope[1], alpha=0.2, color=colors[idx])
 
 	# Add text
-
 	plt.text(0.01, 0.8,
 				r'Amplitude ($A$)'': {0:.2f}$\pm$ {4:.2f}\n'
 				r'Rise time $\tau$:'' {1:.2f}$\pm$ {5:.2f}  \n'
@@ -234,15 +204,8 @@ def plot_lightcurve_and_fit(lc_values, filt_list, values_fit, err_fit, feature,
 					  'Temperature SNR : %.2f'
 					   %(*post_fit_features, err_fit[-1]), transform=ax.transAxes)
 
-
 	plt.title(title, fontsize = 16)
 	plt.legend()
-# 	if len(lc_values[0]) == 17:
-# 		tuple_to_save = (lc_values, filt_list)
-# 		with open('/home/lmiguel/Thesis/generate_plots/tdes/data_lc.pickle', 'wb') as handle:
-# 			pickle.dump(tuple_to_save, handle, protocol=pickle.HIGHEST_PROTOCOL)
-
-
 
 
 def get_std_and_snr(lc_values, filt_list, filters = ['g', 'r']):
@@ -340,6 +303,9 @@ def flag_based_on_post_fit_criteria(post_fit_feat, values_fit):
 
 def extract_features_for_lc(lc_values_unnormalised, feature, min_nb_points_fit = 5,
 							show_plots = False, title_plot = '', post_fit_cuts = True):
+
+	# Create dummy return
+	nan_arrays = list(np.full((18), np.nan))
 	# Create copy
 	lc_values = lc_values_unnormalised.copy()
 	# Delete duplicate times
@@ -348,18 +314,10 @@ def extract_features_for_lc(lc_values_unnormalised, feature, min_nb_points_fit =
 	lc_values, Fvar = crop_old_history_and_get_Fvar(lc_values)
 
 	if not (lc_values.shape[1] >= min_nb_points_fit and is_lc_on_the_rise(lc_values)) or Fvar!=0:
-		return list(np.full((19), np.nan))
-
-# 	# Normalization
-# 	norm = np.max(lc_values[1])
-# 	lc_values[1], lc_values[2] = lc_values[1] / norm, lc_values[2] / norm
+		return nan_arrays
 
 	# Convert filter list to g, r, i strings
 	filt_list = np.vectorize(Config.filt_conv.get)(lc_values[3].astype(int))
-
-# 	from early_tde_classification import extra_tools
-# 	plt.figure()
-# 	extra_tools.plot_lc_from_lc_values_array(lc_values)
 
 	# Fit
 	try:
@@ -375,80 +333,20 @@ def extract_features_for_lc(lc_values_unnormalised, feature, min_nb_points_fit =
 						   post_fit_feat, title = title_plot)
 
 		if post_fit_cuts and not flag_based_on_post_fit_criteria(post_fit_feat, values_fit):
-	# 		return list(np.full((19), np.nan))
-			return list(np.full((18), np.nan))
+			return nan_arrays
 
 		# Plot
 		if show_plots:
 			plot_lightcurve_and_fit(lc_values, filt_list, values_fit, err_fit, feature,
 						   post_fit_feat, title = title_plot)
 
-
-# 		return [norm] + list(values_fit) + list(err_fit) + std_and_snr + post_fit_feat + [Fvar, lc_values.shape[1]]
 		return list(values_fit) + list(err_fit) + std_and_snr + post_fit_feat + [Fvar, lc_values.shape[1]]
 
-
 	except RuntimeError:
-# 		return list(np.full((19), np.nan))
-		return list(np.full((18), np.nan))
+		return nan_arrays
 
 
-
-def feature_extractor_full_LC_row_df(row_obj, feature, min_nb_points_fit = 5, show_plots = False,
-									 keep_only_last_alert = True):
-	# Only latest alert that passes the cut is saved.
-
-	name = row_obj.objectId
-	trans_type = row_obj.type
-	alertid = row_obj.candid
-
-	full_lc_values = np.stack(row_obj[['jd', 'FLUXCAL', 'FLUXCALERR', 'fid']])
-
-	# Delete duplicate times
-	full_lc_values = np.delete(full_lc_values, np.where(np.diff(full_lc_values[0]) == 0)[0], axis = 1)
-
-	# sort by MJD
-	full_lc_values = full_lc_values[:, full_lc_values[0, :].argsort()]
-
-	# Iterate over full lightcurve (from the end) until filter flags are passed.
-	lc_values_cropped = full_lc_values
-
-	if keep_only_last_alert:  # Default. Only last alert that passes the cuts
-
-		for i in range(full_lc_values.shape[1] - min_nb_points_fit + 1):
-
-			out_feat = extract_features_for_lc(lc_values_cropped, feature, min_nb_points_fit, show_plots,
-								title_plot = 'objectId: %s. Transient type: %s. ' %(name, trans_type))
-
-			if np.isnan(out_feat[1]):
-				# Remove last alert for next iteration
-				lc_values_cropped = lc_values_cropped[:, :-1]
-			else:
-				return [name, alertid[out_feat[-1] - 1], trans_type] + out_feat
-# 		return [name, alertid[-1], trans_type] + list(np.full((19), np.nan))
-		return [name, alertid[-1], trans_type] + list(np.full((18), np.nan))
-
-	else:  # All alerts that pass the cuts are returned
-		out_features_list = []
-		for i in range(full_lc_values.shape[1] - min_nb_points_fit + 1):
-
-			out_feat = extract_features_for_lc(lc_values_cropped, feature, min_nb_points_fit, show_plots,
-								title_plot = 'objectId: %s. Transient type: %s. ' %(name, trans_type))
-# 			if not np.isnan(out_feat[1]):
-			if not np.isnan(out_feat[0]):
-				out_features_list.append([name, alertid[out_feat[-1] - 1], trans_type] + out_feat)
-
-			# Remove last alert for next iteration
-			lc_values_cropped = lc_values_cropped[:, :-1]
-		else:
-# 			out_features_list.append([name, alertid[-1], trans_type] + list(np.full((19), np.nan)))
-			out_features_list.append([name, alertid[-1], trans_type] + list(np.full((18), np.nan)))
-
-		return out_features_list
-
-
-def feature_extractor_for_row_df(row_obj, feature, flux_conv_required = True,
-								 min_nb_points_fit = 5, show_plots = False):
+def feature_extractor_for_row_df(row_obj, feature, min_nb_points_fit = 5, show_plots = False):
 	"""
 	Extract features with rainbow for one row of the DataFrame (row_obj).
 
@@ -482,228 +380,64 @@ def feature_extractor_for_row_df(row_obj, feature, flux_conv_required = True,
 	return [name, alertid, trans_type] + out_feat
 
 
-def keep_only_feat_last_alert_per_object(feature_matrix, input_data):
-	"""
-	Function to drop all alerts except the last one for each object, in the features dataframe.
-
-	Parameters
-	----------
-	feature_matrix : pd.DataFrame
-		Feature Dataframe obtained after applying cuts and fitting with Rainbow. It should have at
-		least 'alertId' and 'objId' columns
-	input_data : pd.DataFrame
-		Input df corresponding to the features. Should have at least 'length' and 'candid' columns.
-
-	Returns
-	-------
-	feature_matrix : pd.DataFrame
-		Features df after with only the last alert per object.
-
-	"""
-
-	merged = feature_matrix[['alertId', 'objId']].merge(input_data[['length', 'candid']], how = 'left',
-							   left_on = 'alertId', right_on='candid')
-	feature_matrix = feature_matrix.iloc[merged.groupby('objId')['length'].idxmax()]
-	return feature_matrix
-
-
-def get_final_feature_dataframe_and_save(feature_matrix, input_df, save, keep_only_last_alert,
-										 data_origin):
-	"""
-	Common 'postprocessing' function after feature extraction for TDEs and other objects.
-
-	Saves (if 'save'==True) all features in csv inside 'all_alerts_per_object' folder and filters
-	'features_matrix' to only one alert per object if 'keep_only_last_alert' is True. In this case,
-	also saves the reduced dataframe into csv in 'one_alert_per_object' folder.
-
-	Finally, it saves (if 'save' is True) the resulting feature_matrix df in the main output folder.
-
-	Parameters
-	----------
-	feature_matrix : pd.DataFrame
-		Extracted features matrix.
-	input_df : pd.DataFrame
-		Input df with alert data, which was used to obtain feature_matrix.
-	save : bool
-		Whether to save the features into a csv.
-	keep_only_last_alert : bool
-		Keep only last alert that passed the cuts per object
-	which_data : str
-		Whether data is load 'simbad', 'tns' or 'tdes_ztf'
-
-	Returns
-	-------
-	feature_matrix : pd.DataFrame
-		Extracted features matrix.
-
-	"""
-
-	if save:
-		# Save all features
-		os.makedirs(os.path.join(Config.OUT_FEATURES_DIR, 'all_alerts_per_tde'), exist_ok = True)
-		feature_matrix.to_csv(os.path.join(Config.OUT_FEATURES_DIR, 'all_alerts_per_tde',
-									 'features_tdes_ztf.csv'), index = False)
-
-	if keep_only_last_alert:
-		# Keep only last alert that passed the cut per object
-		feature_matrix = keep_only_feat_last_alert_per_object(feature_matrix, input_df)
-		if save:
-			os.makedirs(os.path.join(Config.OUT_FEATURES_DIR, 'one_alert_per_tde'), exist_ok = True)
-			feature_matrix.to_csv(os.path.join(Config.OUT_FEATURES_DIR, 'one_alert_per_tde',
-									 'features_tdes_ztf.csv'), index = False)
-
-	# Save features into csv in general folder
-	if save:
-		feature_matrix.to_csv(os.path.join(Config.OUT_FEATURES_DIR, 'features_tdes_ztf.csv'),
-							  index = False)
-	return feature_matrix
-
-
-def extract_features_non_tdes_extragal(save = True, show_plots = False, object_list = None,
-											   alert_list = None, keep_only_last_alert = True):
-
-	# Initialise
-	feature = RainbowFit.from_angstrom(Config.band_wave_aa, with_baseline = False,
-									temperature='constant', bolometric='sigmoid')
-	columns_feat = ['objId', 'alertId', 'type',  # 'norm',
-				  'ref_time', 'amplitude', 'rise_time', 'temperature', 'r_chisq',
-					'err_ref_time', 'err_amplitude', 'err_rise_time', 'err_temperature',
-					'std_flux_g', 'std_flux_r', 'std_snr_g', 'std_snr_r',
-					'sigmoid_dist', 'snr_rise_time', 'snr_amplitude', 'Fvar', 'nb_points']
-
-	feature_matrix = pd.DataFrame([], columns = columns_feat)
-
-	# Load
-	extragal_data = load_extragalatic_data_full_lightcurves(object_list = object_list,
-														 alert_list = alert_list)
-	if keep_only_last_alert:
-		# Get features
-		feature_matrix[columns_feat] = extragal_data.apply(
-			lambda x: feature_extractor_full_LC_row_df(x, feature, show_plots = show_plots),
-										 result_type = 'expand', axis = 1)
-	else:
-		feature_matrix = extract_features_all_alerts_per_object_full_LC_df(extragal_data,
-																	 feature,
-																	 columns_feat,
-																	 show_plots = show_plots)
-	feature_matrix.dropna(inplace = True)
-	feature_matrix['data_origin'] = 'extragal'
-
-	# Save features into csv in general folder
-	if save:
-		feature_matrix.to_csv(os.path.join(Config.OUT_FEATURES_DIR, 'features_extragal.csv'),
-							  index = False)
-	return feature_matrix
-
-
-def extract_features_all_alerts_per_object_full_LC_df(extragal_data, feature,
-													  columns_feat,
-													  show_plots = False):
-
-	result_dfs = []
-
-		# Loop over each row in extragal_data
-	for _, row in extragal_data.iterrows():
-		# Call the feature extraction function
-		results = feature_extractor_full_LC_row_df(row, feature, show_plots=show_plots,
-												keep_only_last_alert = False)
-
-		# Check if the result is a list of lists
-		if isinstance(results, list) and all(isinstance(res, list) for res in results):
-			# If so, convert each list into a DataFrame with columns_feat as columns
-			temp_df = pd.DataFrame(results, columns=columns_feat)
-		else:
-			# Otherwise, assume it's a single list and convert it into a single-row DataFrame
-			temp_df = pd.DataFrame([results], columns=columns_feat)
-
-		# Append the resulting DataFrame to the list
-		result_dfs.append(temp_df)
-	# Concatenate all DataFrames into the final feature matrix
-	feature_matrix = pd.concat(result_dfs, ignore_index=True)
-
-	return feature_matrix
-
-
-
-
-def extract_features_tdes(save = True, show_plots = False, keep_only_last_alert = True,
-						  object_list = None, alert_list = None):
-	"""
-	Extract features (with rainbow) for TDEs from ZTF, from lightcurves (one lightcurve per alert)
-
-	Parameters
-	----------
-	save : bool, optional
-		Whether to save the features into a csv. The default is True.
-	keep_only_last_alert : bool, optional
-		Keep only last alert that passed the cuts per object. The default is False.
-
-	Returns
-	-------
-	feature_matrix : pd.DataFrame
-		Rainbow features extracted.
-
-	"""
-	# Initialise
-	feature = RainbowFit.from_angstrom(Config.band_wave_aa, with_baseline = False,
-									temperature='constant', bolometric='sigmoid')
-	columns_feat = ['objId', 'alertId', 'type',  # 'norm',
-				  'ref_time', 'amplitude', 'rise_time', 'temperature', 'r_chisq',
-					'err_ref_time', 'err_amplitude', 'err_rise_time', 'err_temperature',
-					'std_flux_g', 'std_flux_r', 'std_snr_g', 'std_snr_r',
-					'sigmoid_dist', 'snr_rise_time', 'snr_amplitude', 'Fvar', 'nb_points']
-
-	feature_matrix = pd.DataFrame([], columns = columns_feat)
-
-	# Load
-	ztf_tde_data = load_tdes_ztf(object_list = object_list, alert_list = alert_list)
-
-	# Get features
-	feature_matrix[columns_feat] = ztf_tde_data.apply(
-		lambda x: feature_extractor_for_row_df(x, feature, flux_conv_required=False,
-										  show_plots = show_plots), result_type = 'expand', axis = 1)
-	feature_matrix.dropna(inplace = True)
-	feature_matrix['data_origin'] = 'tdes_ztf'
-
-	feature_matrix = get_final_feature_dataframe_and_save(feature_matrix, ztf_tde_data, save,
-													   keep_only_last_alert, 'tdes_ztf')
-	return feature_matrix
-
-
-def extract_features(data_origin, **kwargs):
+def load_data_and_extract_features(save = True, show_plots = False, object_list = None,
+								alert_list = None):
 	"""
 	Main function to extract the features.
 
 	Parameters
 	----------
-	data_origin : str
-		Which data to process. 'tdes_ztf', 'tns', 'simbad', or 'all'.
-	**kwargs: Other arguments, such as save, nb_files or show_plots.
+	save : TYPE, optional
+		DESCRIPTION. The default is True.
+	show_plots : TYPE, optional
+		DESCRIPTION. The default is False.
+	object_list : TYPE, optional
+		DESCRIPTION. The default is None.
+	alert_list : TYPE, optional
+		DESCRIPTION. The default is None.
+	keep_only_last_alert : TYPE, optional
+		DESCRIPTION. The default is True.
+
+	Returns
+	-------
+	feature_matrix : TYPE
+		DESCRIPTION.
 
 	"""
 
-	if data_origin == 'tdes_ztf':
-		return extract_features_tdes(**kwargs)
-	elif data_origin == 'extragal':
-		return extract_features_non_tdes_extragal(**kwargs)
-	elif data_origin == 'all':
-		feat_tdes = extract_features_tdes(**kwargs)
-		feat_extragal = extract_features_non_tdes_extragal(**kwargs)
+	# Initialise Rainbow
+	feature = RainbowFit.from_angstrom(Config.band_wave_aa, with_baseline = False,
+									temperature='constant', bolometric='sigmoid')
+	columns_feat = ['objId', 'alertId', 'type',  # 'norm',
+				  'ref_time', 'amplitude', 'rise_time', 'temperature', 'r_chisq',
+					'err_ref_time', 'err_amplitude', 'err_rise_time', 'err_temperature',
+					'std_flux_g', 'std_flux_r', 'std_snr_g', 'std_snr_r',
+					'sigmoid_dist', 'snr_rise_time', 'snr_amplitude', 'Fvar', 'nb_points']
 
-		# Merge and save features
-		all_features = pd.concat([feat_tdes, feat_extragal])
-		if "save" in kwargs:
- 			all_features.to_csv(os.path.join(
-				Config.OUT_FEATURES_DIR, 'features_all.csv'), index = False)
-		return all_features
-	else:
-		print('Wrong string given as data origin. Must be "extragal", "tdes_ztf" or "all"')
+	feature_matrix = pd.DataFrame([], columns = columns_feat)
+
+	# Load data
+	all_data = load_data_full_lightcurves(object_list = object_list,
+														 alert_list = alert_list)
+
+	# Extract features
+	feature_matrix[columns_feat] = all_data.apply(
+		lambda x: feature_extractor_for_row_df(x, feature, show_plots = show_plots),
+				result_type = 'expand', axis = 1)
+
+	feature_matrix.dropna(inplace = True)
+
+	# Save features into csv in general folder
+	if save:
+		feature_matrix.to_csv(os.path.join(Config.OUT_FEATURES_DIR, 'features.csv'),
+							  index = False)
+	return feature_matrix
 
 
 if __name__ == '__main__':
 
 	start = dt.datetime.now()
 
-	extract_features('extragal', save = True, show_plots = False, keep_only_last_alert=False)
+	load_data_and_extract_features(save = True, show_plots = False)
 
 	logging .info("Done in {} seconds.".format(dt.datetime.now() - start))
