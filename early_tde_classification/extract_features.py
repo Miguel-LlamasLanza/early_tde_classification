@@ -452,7 +452,13 @@ def feature_extractor_for_row_df(row_obj, feature, min_nb_points_fit = 5, show_p
 	trans_type = row_obj.type
 	alertid = row_obj.candid
 
-	lc_values = np.stack(row_obj[['cMJD', 'cFLUXCAL', 'cFLUXCALERR', 'cFLT']])
+	lc_values = np.stack(row_obj[['jd', 'FLUXCAL', 'FLUXCALERR', 'fid']])
+
+	# Delete duplicate times
+	lc_values = np.delete(lc_values, np.where(np.diff(lc_values[0]) == 0)[0], axis = 1)
+
+	# sort by MJD
+	lc_values = lc_values[:, lc_values[0, :].argsort()]
 
 	out_feat = extract_features_for_lc(lc_values, feature, min_nb_points_fit, show_plots,
 						title_plot = 'objectId: %s. Transient type: %s. ' %(name, trans_type))

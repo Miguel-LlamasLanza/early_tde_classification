@@ -21,7 +21,7 @@ class Config:
 	DATA_DIR = join(PROJECT_PATH, '..', 'data')
 	INPUT_DIR = join(DATA_DIR, 'input')
 # 	INPUT_DATA_FNAME = 'full_LCs_all_objects_tns_all.parquet'
-	INPUT_DATA_FNAME = 'alerts_2024_10.parquet'
+	INPUT_DATA_FNAME = 'full_LCs_all_objects_tns_all.parquet'
 
 	OUTPUT_DIR = join(DATA_DIR, 'output')
 	OUT_FEATURES_DIR = join(OUTPUT_DIR, 'features')
