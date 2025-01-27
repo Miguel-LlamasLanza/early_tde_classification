@@ -44,7 +44,7 @@ def load_data_full_lightcurves(object_list = None, alert_list = None):
 	"""
 
 	df = pd.read_parquet(os.path.join(Config.INPUT_DIR,
-							   Config.EXTRAGAL_FNAME))
+							   Config.INPUT_DATA_FNAME))
 
 	df.columns = df.columns.str.lstrip('i:')  # strip prefix
 	if object_list:
@@ -157,7 +157,7 @@ def plot_lightcurve_and_fit(lc_values, filt_list, values_fit, err_fit, feature,
 	values_fit : list
 		Values from the fit (including chisq).
 	err_fit : list
-		DESCRIPTION.
+		Errors from the fit.
 	title : str, optional
 		To put as plot title (e.g. ZTF name + transient type)
 
@@ -242,6 +242,10 @@ def get_std_and_snr(lc_values, filt_list, filters = ['g', 'r']):
 
 
 def compute_fractional_variability(fluxcal, fluxcalerr):
+	"""
+	Compute fractional variability from Flux and Fluxerror
+
+	"""
 
 	# Taken from https://www.mdpi.com/2075-4434/7/2/62
 
@@ -252,6 +256,23 @@ def compute_fractional_variability(fluxcal, fluxcalerr):
 
 
 def crop_old_history_and_get_Fvar(lc_values):
+	"""
+	Crop old history from the lightcurve (keep only recent alerts, e.g. from the last 100 days)
+	and compute fractional variability.
+
+	Parameters
+	----------
+	lc_values : 2d array
+		Values (mjd, flux, fluxerr, filter) from the lightcurve.
+
+	Returns
+	-------
+	lc_values : 2d array
+		Cropped lc_values.
+	Fvar : float
+		Fractional variability (https://www.mdpi.com/2075-4434/7/2/62).
+
+	"""
 
 	# Crop everything before a certain date (last alert - Config.days_history_lc)
 	mask = lc_values[0] >= (lc_values[0][-1] - Config.days_history_lc)
@@ -268,6 +289,17 @@ def crop_old_history_and_get_Fvar(lc_values):
 
 
 def is_lc_on_the_rise(lc_values):
+	"""
+	Check whether last alert of the lightcurve is on the rise (showing rise and not decay yet)
+
+	Parameters
+	----------
+	lc_values : 2d array
+		Cropped lc_values.
+
+	Returns True or False
+
+	"""
 
 	# Check whether it is rising and not decaying
 	rising_flag, decaying_flag = get_rising_flags_per_filter(*lc_values, list_filters = [1, 2],
@@ -277,6 +309,21 @@ def is_lc_on_the_rise(lc_values):
 
 
 def get_post_fit_features(lc_values, values_fit, err_fit):
+	"""
+	Compute and get additional features derived from the Rainbow fit.
+
+	Parameters
+	----------
+	lc_values : 2d array
+		Cropped lc_values.
+	values_fit : list
+		Values from the fit (including chisq).
+	err_fit : list
+		Errors from the Rainbow fit.
+
+	Returns list of additional features
+
+	"""
 
 	# Relative distance of the last datapoint to the center of the sigmoid, wrt the rise time
 	sigmoid_center_ref = (lc_values[0, -1] - values_fit[0]) / values_fit[2]
@@ -288,6 +335,19 @@ def get_post_fit_features(lc_values, values_fit, err_fit):
 
 
 def flag_based_on_post_fit_criteria(post_fit_feat, values_fit):
+	"""
+	Compute a flag to drop values with criteria based on post-fit features.
+
+	Parameters
+	----------
+	post_fit_feat : list
+		list of features computed after the fit.
+	values_fit : list
+		Values from the Rainbow fit (including chisq).
+
+	Returns True or False
+
+	"""
 
 	sigmoid_center_ref, snr_rise_time, snr_amplitude = post_fit_feat
 	flag = (sigmoid_center_ref > Config.sigdist_lim[0] and sigmoid_center_ref < Config.sigdist_lim[1]
@@ -301,13 +361,34 @@ def flag_based_on_post_fit_criteria(post_fit_feat, values_fit):
 	return flag
 
 
-def extract_features_for_lc(lc_values_unnormalised, feature, min_nb_points_fit = 5,
+def extract_features_for_lc(lc_values_orig, feature, min_nb_points_fit = 5,
 							show_plots = False, title_plot = '', post_fit_cuts = True):
+	"""
+	Perform the feature extraction for a specific lightcurve
+
+	Parameters
+	----------
+	lc_values_orig : 2d array
+		Values (mjd, flux, fluxerr, filter) from the lightcurve.
+	feature : TYPE
+		DESCRIPTION.
+	min_nb_points_fit : int, optional
+		Mininum number of points required by the fit. The default is 5.
+	show_plots : float, optional
+		Whether to generate and show plots. The default is False.
+	title_plot : string, optional
+		Title of the plot, if show_plots is True. The default is ''.
+	post_fit_cuts : float, optional
+		Whether to apply cuts derived from the fit. The default is True.
+
+	Returns list of features
+
+	"""
 
 	# Create dummy return
 	nan_arrays = list(np.full((18), np.nan))
 	# Create copy
-	lc_values = lc_values_unnormalised.copy()
+	lc_values = lc_values_orig.copy()
 	# Delete duplicate times
 	lc_values = np.delete(lc_values, np.where(np.diff(lc_values[0]) == 0)[0], axis = 1)
 	# Crop out old history
@@ -356,15 +437,14 @@ def feature_extractor_for_row_df(row_obj, feature, min_nb_points_fit = 5, show_p
 		DESCRIPTION.
 	feature : TYPE
 		DESCRIPTION.
-	min_nb_points_fit : TYPE, optional
-		DESCRIPTION. The default is 5.
-	show_plots : TYPE, optional
-		DESCRIPTION. The default is False.
+	min_nb_points_fit : int, optional
+		Mininum number of points required by the fit. The default is 5.
+	show_plots : float, optional
+		Whether to generate and show plots. The default is False.
 
-	Returns
+	Returns  (list)
 	-------
-	TYPE
-		DESCRIPTION.
+		Output including metadata (name, alert ID, transient type) and features.
 
 	"""
 
@@ -387,28 +467,27 @@ def load_data_and_extract_features(save = True, show_plots = False, object_list 
 
 	Parameters
 	----------
-	save : TYPE, optional
-		DESCRIPTION. The default is True.
-	show_plots : TYPE, optional
-		DESCRIPTION. The default is False.
-	object_list : TYPE, optional
-		DESCRIPTION. The default is None.
-	alert_list : TYPE, optional
-		DESCRIPTION. The default is None.
-	keep_only_last_alert : TYPE, optional
-		DESCRIPTION. The default is True.
+	save : float, optional
+		Whether to save features to a csv. The default is True.
+	show_plots : float, optional
+		Whether to generate and show plots. The default is False.
+	object_list : list of strings, optional
+		List of object IDs to include. The default is None (include all loaded objects).
+	alert_list : list of strings, optional
+		List of alert IDs to include. The default is None (include all loaded alerts).
+
 
 	Returns
 	-------
-	feature_matrix : TYPE
-		DESCRIPTION.
+	feature_matrix : pd.DataFrame
+		output data, including the extracted features and metadata for each lightcurve.
 
 	"""
 
 	# Initialise Rainbow
 	feature = RainbowFit.from_angstrom(Config.band_wave_aa, with_baseline = False,
 									temperature='constant', bolometric='sigmoid')
-	columns_feat = ['objId', 'alertId', 'type',  # 'norm',
+	columns_feat = ['objectId', 'alertId', 'type',  # 'norm',
 				  'ref_time', 'amplitude', 'rise_time', 'temperature', 'r_chisq',
 					'err_ref_time', 'err_amplitude', 'err_rise_time', 'err_temperature',
 					'std_flux_g', 'std_flux_r', 'std_snr_g', 'std_snr_r',
@@ -438,6 +517,6 @@ if __name__ == '__main__':
 
 	start = dt.datetime.now()
 
-	load_data_and_extract_features(save = True, show_plots = False)
+	feature_data = load_data_and_extract_features(save = True, show_plots = False)
 
 	logging .info("Done in {} seconds.".format(dt.datetime.now() - start))
