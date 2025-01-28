@@ -15,7 +15,7 @@ try:
 
 except ModuleNotFoundError:  # This is in case the module is not installed.
 	from extract_features import load_data_and_extract_features
-	from classifier import load_features, run_classifier_on_features
+	from classifier import filter_features, run_classifier_on_features
 
 
 # Measure time
@@ -27,4 +27,3 @@ candidate_tdes = run_classifier_on_features(features, features_with_metadata)
 
 # Log the computation duration
 logging .info("Done in {} seconds.".format(dt.datetime.now() - start))
-

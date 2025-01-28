@@ -119,7 +119,7 @@ if __name__ == '__main__':
 
 	start = dt.datetime.now()
 
-	features_with_metadata, features = load_features()
+	features_with_metadata, features = load_features_for_classifier()
 	candidate_tdes = run_classifier_on_features(features, features_with_metadata)
 	logging .info("Done in {} seconds.".format(dt.datetime.now() - start))
 
