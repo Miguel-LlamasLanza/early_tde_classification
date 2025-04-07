@@ -454,16 +454,22 @@ def feature_extractor_for_row_df(row_obj, feature, min_nb_points_fit = 5, show_p
 
 	lc_values = np.stack(row_obj[['jd', 'FLUXCAL', 'FLUXCALERR', 'fid']])
 
-	# Delete duplicate times
-	lc_values = np.delete(lc_values, np.where(np.diff(lc_values[0]) == 0)[0], axis = 1)
+	# Delete elements with duplicate time (just in case)
+	no_duplicate_mask = np.where(np.diff(lc_values[0]) == 0)[0]
+	lc_values = np.delete(lc_values, no_duplicate_mask, axis=1)
+	alertid = np.delete(alertid, no_duplicate_mask)  # Also delete corresponding alertid values
 
-	# sort by MJD
-	lc_values = lc_values[:, lc_values[0, :].argsort()]
+	# sort by MJD (apply to lc_values and also alertID)
+	sorted_indices = lc_values[0, :].argsort()
+	lc_values = lc_values[:, sorted_indices]
+	alertid = alertid[sorted_indices]
 
 	out_feat = extract_features_for_lc(lc_values, feature, min_nb_points_fit, show_plots,
 						title_plot = 'objectId: %s. Transient type: %s. ' %(name, trans_type))
-
-	return [name, alertid, trans_type] + out_feat
+	if not np.isnan(out_feat[0]):
+		pass
+		return [name, alertid[out_feat[-1] - 1], trans_type] + out_feat
+	return [name, alertid[- 1], trans_type] + out_feat
 
 
 def load_data_and_extract_features(save = True, show_plots = False, object_list = None,
