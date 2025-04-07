@@ -350,10 +350,6 @@ def extract_features_for_lc(lc_values_unnormalised, feature, min_nb_points_fit =
 	if not (lc_values.shape[1] >= min_nb_points_fit and is_lc_on_the_rise(lc_values)) or Fvar!=0:
 		return list(np.full((19), np.nan))
 
-# 	# Normalization
-# 	norm = np.max(lc_values[1])
-# 	lc_values[1], lc_values[2] = lc_values[1] / norm, lc_values[2] / norm
-
 	# Convert filter list to g, r, i strings
 	filt_list = np.vectorize(Config.filt_conv.get)(lc_values[3].astype(int))
 
@@ -375,7 +371,6 @@ def extract_features_for_lc(lc_values_unnormalised, feature, min_nb_points_fit =
 						   post_fit_feat, title = title_plot)
 
 		if post_fit_cuts and not flag_based_on_post_fit_criteria(post_fit_feat, values_fit):
-	# 		return list(np.full((19), np.nan))
 			return list(np.full((18), np.nan))
 
 		# Plot
@@ -384,19 +379,16 @@ def extract_features_for_lc(lc_values_unnormalised, feature, min_nb_points_fit =
 						   post_fit_feat, title = title_plot)
 
 
-# 		return [norm] + list(values_fit) + list(err_fit) + std_and_snr + post_fit_feat + [Fvar, lc_values.shape[1]]
 		return list(values_fit) + list(err_fit) + std_and_snr + post_fit_feat + [Fvar, lc_values.shape[1]]
 
 
 	except RuntimeError:
-# 		return list(np.full((19), np.nan))
 		return list(np.full((18), np.nan))
 
 
 
 def feature_extractor_full_LC_row_df(row_obj, feature, min_nb_points_fit = 5, show_plots = False,
 									 keep_only_last_alert = True):
-	# Only latest alert that passes the cut is saved.
 
 	name = row_obj.objectId
 	trans_type = row_obj.type
@@ -404,11 +396,17 @@ def feature_extractor_full_LC_row_df(row_obj, feature, min_nb_points_fit = 5, sh
 
 	full_lc_values = np.stack(row_obj[['jd', 'FLUXCAL', 'FLUXCALERR', 'fid']])
 
-	# Delete duplicate times
-	full_lc_values = np.delete(full_lc_values, np.where(np.diff(full_lc_values[0]) == 0)[0], axis = 1)
+	# Delete elements with duplicate time (just in case)
+	no_duplicate_mask = np.where(np.diff(full_lc_values[0]) == 0)[0]
+	full_lc_values = np.delete(full_lc_values, no_duplicate_mask, axis=1)
+	alertid = np.delete(alertid, no_duplicate_mask)  # Also delete corresponding alertid values
 
-	# sort by MJD
-	full_lc_values = full_lc_values[:, full_lc_values[0, :].argsort()]
+	# sort by MJD (apply to lc_values and also alertID)
+	sorted_indices = full_lc_values[0, :].argsort()
+	full_lc_values = full_lc_values[:, sorted_indices]
+	alertid = alertid[sorted_indices]
+
+# 	full_lc_values = full_lc_values[:, full_lc_values[0, :].argsort()]
 
 	# Iterate over full lightcurve (from the end) until filter flags are passed.
 	lc_values_cropped = full_lc_values
@@ -425,7 +423,6 @@ def feature_extractor_full_LC_row_df(row_obj, feature, min_nb_points_fit = 5, sh
 				lc_values_cropped = lc_values_cropped[:, :-1]
 			else:
 				return [name, alertid[out_feat[-1] - 1], trans_type] + out_feat
-# 		return [name, alertid[-1], trans_type] + list(np.full((19), np.nan))
 		return [name, alertid[-1], trans_type] + list(np.full((18), np.nan))
 
 	else:  # All alerts that pass the cuts are returned
@@ -434,14 +431,12 @@ def feature_extractor_full_LC_row_df(row_obj, feature, min_nb_points_fit = 5, sh
 
 			out_feat = extract_features_for_lc(lc_values_cropped, feature, min_nb_points_fit, show_plots,
 								title_plot = 'objectId: %s. Transient type: %s. ' %(name, trans_type))
-# 			if not np.isnan(out_feat[1]):
 			if not np.isnan(out_feat[0]):
 				out_features_list.append([name, alertid[out_feat[-1] - 1], trans_type] + out_feat)
 
 			# Remove last alert for next iteration
 			lc_values_cropped = lc_values_cropped[:, :-1]
 		else:
-# 			out_features_list.append([name, alertid[-1], trans_type] + list(np.full((19), np.nan)))
 			out_features_list.append([name, alertid[-1], trans_type] + list(np.full((18), np.nan)))
 
 		return out_features_list
@@ -602,7 +597,7 @@ def extract_features_all_alerts_per_object_full_LC_df(extragal_data, feature,
 
 	result_dfs = []
 
-		# Loop over each row in extragal_data
+	# Loop over each row in extragal_data
 	for _, row in extragal_data.iterrows():
 		# Call the feature extraction function
 		results = feature_extractor_full_LC_row_df(row, feature, show_plots=show_plots,

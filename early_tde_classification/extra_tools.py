@@ -65,6 +65,45 @@ def get_objectId_with_tns_labels(save = False):
 
 	return tns_ztf, tns_ztf_tde
 
+def correct_alertid_in_feat_data():
+
+
+	import pandas as pd
+	import numpy as np
+	from early_tde_classification.extract_features import load_extragalatic_data_full_lightcurves as load_lcs
+
+	# Load features data
+	feat_data = pd.read_csv('features_with_tns_labels.csv')
+	orig_data = load_lcs()
+
+	# Create mapping of original alertid to corrected one
+	mapping = {}
+	for _,row_orig in orig_data.iterrows():
+
+		original_alertid = np.array(row_orig['candid'])  # Unsorted alertid list
+		original_jd = np.array(row_orig['jd'])  # Unsorted jd list
+
+		# Sort JD and get sorting indices
+		sorted_indices = np.argsort(original_jd)
+
+		# Sort alertid using the same order as jd
+		sorted_alertid = original_alertid[sorted_indices]
+
+		mapping.update(dict(zip(original_alertid, sorted_alertid)))
+
+	def correct_alertId(row_feat):
+
+		return mapping[row_feat.alertId]
+		
+
+	# Apply correction
+	feat_data['alertId'] = feat_data.apply(correct_alertId, axis=1)
+
+	# Save corrected feature data
+	feat_data.to_csv('features_with_tns_labels_correct_alertids.csv', index=False)
+
+
+
 
 def get_labelled_dataset(selection = 'all', save = False):
 
