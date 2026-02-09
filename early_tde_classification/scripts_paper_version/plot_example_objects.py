@@ -14,10 +14,10 @@ COLORS_ZTF = {1: "#15284F", 2: "#F5622E", 3: "#3C8DFF", 4: "#D5D5D3"}
 
 # Which objects to plot
 example_objs = [
-# 	'ZTF23abjvojy', # QSO, two very strong variability episodes almost fifteen years apart. Repeated Ambiguous Nuclear Transient?..
+	'ZTF23abjvojy', # QSO, two very strong variability episodes almost fifteen years apart. Repeated Ambiguous Nuclear Transient?..
 	'ZTF22abzajwl', # AT2023adr - repeating TDE
-# 	'ZTF20accxwrk', # AT2020ukj - long-duration brightening of a until-then passive galaxy. Could be a TDE, but the timescales are very long.
-# 	'ZTF19aayijkh', # AT2022yhf - long-duration brightening of a blue, slightly variable object that is likely an AGN. No cooling down in the decay. Hints of infrared echo.
+	'ZTF20accxwrk', # AT2020ukj - long-duration brightening of a until-then passive galaxy. Could be a TDE, but the timescales are very long.
+	'ZTF19aayijkh', # AT2022yhf - long-duration brightening of a blue, slightly variable object that is likely an AGN. No cooling down in the decay. Hints of infrared echo.
 ]
 # Paths
 input_dir = '/home/lmiguel/gitlab_projects/TDE classification/tde_classification/data/input'
@@ -129,7 +129,6 @@ for i, cand in enumerate([{'objectId': _} for _ in example_objs]):
 
 			# Run the classifier
 			scores = clf.predict(feat_model)  # Best fit + sampled
-			print(scores)
 			best_score = scores[0]  # Best fit score
 			frac_scores = np.sum(scores) / len(scores)  # Fraction of samples that score positive
 
@@ -138,7 +137,8 @@ for i, cand in enumerate([{'objectId': _} for _ in example_objs]):
 			valid_score_mjd.append(row_feat['jd_max'] - 2400000.5)
 	if len(valid_score_mjd)>0:
 # 		for line in valid_score_mjd:
-		ax1.axvline(np.min(valid_score_mjd), ls = 'dashed', color = 'black', lw = 1.5)
+		ax1.axvline(np.min(valid_score_mjd), ls = 'dashed', color = 'black', lw = 1.2,
+			  label = 'First identification')
 
 
 
