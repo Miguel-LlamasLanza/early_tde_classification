@@ -1,3 +1,5 @@
+OUTDATED. Early prototype of the project. The production version lives in the Fink's repository (https://github.com/astrolabsoftware/fink-filters/tree/master/fink_filters/ztf/filter_early_tde_candidates)
+
 # Early TDE classification
 
 Project containing the first steps on the TDE early photometric classification to be used within FINK, for ZTF and LSST data.
@@ -34,6 +36,6 @@ It is important to add the [non-tde data from Fink](https://box.in2p3.fr/s/A6jpA
 The features can be extracted using the extract\_features.py script, where you can manually specify on which data you want to perform the feature extraction.
 The features should be merged into the features_all.csv file. The script merge\_csvs.py can also be used to put all the extracted features in the same csv.
 
-(currently unused) Then, you can use the python script snad_aad.py in the anomaly detection folder, in order to run the SNAD\_AAD method on the extracted features.
-Currently (June 2024), we are using the **Random Forest classifier**, inside the RF_classifier folder.
+Then, you can use the python script snad_aad.py in the anomaly detection folder, in order to run the SNAD\_AAD method on the extracted features (UNUSED).
+Currently, we are using the **Random Forest classifier**, inside the RF_classifier folder.
 
